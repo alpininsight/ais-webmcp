@@ -107,18 +107,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Additional profile name to accept (repeatable). Built-ins always allowed.",
     )
     for command in ("doctor", "status"):
-        diagnosis = sub.add_parser(command, help="Read-only local host configuration checklist")
-        diagnosis.add_argument("manifest", type=Path)
-        diagnosis.add_argument("--html", type=Path)
+        diagnosis = sub.add_parser(
+            command,
+            help="Read-only local host checklist (manifest, CSP notes, redacted Origin Trial)",
+        )
+        diagnosis.add_argument(
+            "manifest",
+            help="Local manifest path. http and https URLs are refused.",
+        )
+        diagnosis.add_argument(
+            "--html",
+            help="Optional local HTML file. Remote URLs are refused.",
+        )
         diagnosis.add_argument("--format", choices=("text", "json"), default="text")
         diagnosis.add_argument("--allow-profile", action="append", type=profile_argument)
     diff = sub.add_parser("diff", help="Compare validated manifests; 1 means differences")
     diff.add_argument("left", type=Path)
     diff.add_argument("right", type=Path)
     diff.add_argument("--allow-profile", action="append", type=profile_argument)
-    export = sub.add_parser("export", help="Export a validated manifest without clobbering")
+    export = sub.add_parser(
+        "export",
+        help="Export a validated manifest, JSON tools list, or static snippet",
+    )
     export.add_argument("source", type=Path)
     export.add_argument("--output", "-o", type=Path, required=True)
+    export.add_argument(
+        "--kind",
+        choices=("manifest", "tools", "snippet"),
+        default="manifest",
+        help="manifest (canonical JSON/YAML), tools (JSON list), or snippet (HTML, no token).",
+    )
     export.add_argument("--force", action="store_true")
     export.add_argument("--allow-profile", action="append", type=profile_argument)
     return parser
@@ -145,17 +163,23 @@ def main(argv: list[str] | None = None) -> int:
             if args.format == "json":
                 sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
             else:
-                sys.stdout.write(
-                    "".join(f"{r['check']}: {r['status']}\n" for r in report["checks"])
-                    + report["note"]
-                    + "\n"
-                )
+                lines = []
+                for row in report["checks"]:
+                    line = f"{row['check']}: {row['status']}"
+                    if row.get("detail"):
+                        line = f"{line} ({row['detail']})"
+                    lines.append(line)
+                sys.stdout.write("\n".join(lines) + "\n" + report["note"] + "\n")
             return code
         if args.command == "diff":
             report, code = diff_manifests(args.left, args.right, extra_profiles=extra)
         else:
             result = export_manifest(
-                args.source, args.output, force=args.force, extra_profiles=extra
+                args.source,
+                args.output,
+                force=args.force,
+                extra_profiles=extra,
+                kind=args.kind,
             )
             report, code = result.report, result.exit_code
         sys.stdout.write(report)

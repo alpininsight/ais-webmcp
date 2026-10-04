@@ -18,13 +18,18 @@ ais-webmcp validate manifest.yaml
 ais-webmcp list manifest.yaml
 ais-webmcp doctor manifest.yaml --html index.html
 ais-webmcp export manifest.yaml --output webmcp.manifest.json
+ais-webmcp export manifest.yaml --kind tools --output tools.json
+ais-webmcp export manifest.yaml --kind snippet --output snippet.html
 ais-webmcp diff manifest.yaml webmcp.manifest.json
 ```
 
 Python 3.12+; Django is not required. `doctor` and `status` report local
-configuration; browser support is verified separately. Existing files are
-protected unless you pass `--force`. Consequential tools stay disabled in
-scaffolds until the host explicitly enables and implements them.
+configuration and refuse remote URLs; browser support is verified separately.
+CSP is noted and not rewritten. Origin Trial tokens are redacted to character
+lengths. `export` can write a canonical manifest, a JSON tools list, or a
+static snippet with no token. Existing files are protected unless you pass
+`--force`. Consequential tools stay disabled in scaffolds until the host
+explicitly enables and implements them.
 
 This package and the `insight-ui-webmcp` Django extension live in the same
 [monorepo](https://github.com/alpininsight/insight-ui-webmcp) and share one schema
