@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:insight-ui-webmcp:webmcp-manifest:1",
+  "title": "WebMCP tool manifest",
+  "description": "Single source of truth for a WebMCP host manifest, shared by Django profiles and static pages. The canonical parameter object is inputSchema; parameters and input_schema are accepted aliases but only one may be set. register.js reads inputSchema or parameters, not input_schema (prepare normalizes the Python alias to inputSchema). annotations.debugging is intentionally not allowed (issue #9). A consequential tool must set enabled explicitly (true or false). subscribe_newsletter and other subscribe_* tools stay consequential and ship enabled false unless the host opts in (issue #3). Unregister is AbortController / { signal } on registerTool, not unregisterTool (issue #11). This schema does not execute tools and is not a live-page CRUD API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile", "version", "tools"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "enum": ["webpage"],
+      "description": "Built-in profile name. Host-specific names are rejected unless the validator is given them explicitly. Keep this enum aligned with webmcp_manifest.profiles."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Manifest content version. Quote the value in YAML so it stays a string (\"1\", not 1)."
+    },
+    "anchors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+          "description": "Stable WebMCP tool token. register.js maps id to registerTool name. Required when name is a human label."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable label (register.js title when it differs from id). If id is omitted, name itself must be the stable token."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputSchema": {
+          "$ref": "#/$defs/inputSchema"
+        },
+        "parameters": {
+          "$ref": "#/$defs/inputSchema"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/inputSchema"
+        },
+        "consequential": {
+          "type": "boolean",
+          "description": "Side-effecting tool. Defaults to false when omitted. Does not by itself enable the tool."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Explicit host opt-in. Required when consequential is true. false is valid and is the shipped default for subscribe_newsletter."
+        },
+        "annotations": {
+          "$ref": "#/$defs/annotations"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/oneSchemaKey"
+        },
+        {
+          "if": {
+            "required": ["consequential"],
+            "properties": {
+              "consequential": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["enabled"]
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "required": ["id"]
+            }
+          },
+          "then": {
+            "properties": {
+              "name": {
+                "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "inputSchema": {
+      "type": "object"
+    },
+    "oneSchemaKey": {
+      "description": "Exactly one of inputSchema, parameters, input_schema.",
+      "oneOf": [
+        {
+          "required": ["inputSchema"],
+          "properties": {
+            "parameters": false,
+            "input_schema": false
+          }
+        },
+        {
+          "required": ["parameters"],
+          "properties": {
+            "inputSchema": false,
+            "input_schema": false
+          }
+        },
+        {
+          "required": ["input_schema"],
+          "properties": {
+            "inputSchema": false,
+            "parameters": false
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "readOnlyHint": {
+          "type": "boolean"
+        },
+        "consequentialHint": {
+          "type": "boolean"
+        },
+        "untrustedContentHint": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

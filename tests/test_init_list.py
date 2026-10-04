@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from insight_ui_webmcp.scaffold import STARTER_NOTE, init_manifest, starter_manifest
-from insight_ui_webmcp.validate import validate_path
+from ais_webmcp.scaffold import STARTER_NOTE, init_manifest, starter_manifest
+from webmcp_manifest.validate import validate_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VALID_JSON = REPO_ROOT / "tests" / "fixtures" / "manifests" / "valid" / "webpage.json"
@@ -22,9 +22,14 @@ INVALID = REPO_ROOT / "tests" / "fixtures" / "manifests" / "invalid" / "duplicat
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     return subprocess.run(
-        [sys.executable, "-m", "insight_ui_webmcp", *args],
+        [sys.executable, "-m", "ais_webmcp", *args],
         cwd=cwd or REPO_ROOT,
         env=env,
         check=False,
@@ -195,12 +200,17 @@ def test_list_fixture_and_invalid_exits() -> None:
 def test_init_and_list_import_do_not_load_django() -> None:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     code = (
         "import sys\n"
-        "import insight_ui_webmcp.cli\n"
-        "import insight_ui_webmcp.scaffold\n"
-        "import insight_ui_webmcp.listing\n"
+        "import ais_webmcp.cli\n"
+        "import ais_webmcp.scaffold\n"
+        "import ais_webmcp.listing\n"
         "assert 'django' not in sys.modules\n"
     )
     proc = subprocess.run(

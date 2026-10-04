@@ -1,6 +1,6 @@
 """CI gate for committed WebMCP manifest fixtures.
 
-Runs the Django-free ``ais-webmcp`` console script (or ``python -m insight_ui_webmcp``).
+Runs the Django-free ``ais-webmcp`` console script (or ``python -m ais_webmcp``).
 This file must not import Django or the package: the child process is the check.
 """
 
@@ -36,7 +36,7 @@ def _argv(manifest: Path) -> list[str]:
     script = Path(sys.executable).with_name("ais-webmcp")
     if script.is_file():
         return [str(script), "validate", str(manifest)]
-    return [sys.executable, "-m", "insight_ui_webmcp", "validate", str(manifest)]
+    return [sys.executable, "-m", "ais_webmcp", "validate", str(manifest)]
 
 
 def _run(manifest: Path) -> subprocess.CompletedProcess[str]:

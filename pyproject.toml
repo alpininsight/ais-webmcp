@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ais-webmcp"
+version = "0.0.0" # Managed by GitVersion.
+description = "Dev/CI client and shared WebMCP manifest schema. No Django dependency."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Alpin Insight Solutions GmbH & Co. KG" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "pyyaml>=6.0.2,<7",
+]
+
+[project.scripts]
+ais-webmcp = "ais_webmcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/alpininsight/insight-ui-webmcp"
+Documentation = "https://github.com/alpininsight/insight-ui-webmcp#documentation"
+Issues = "https://github.com/alpininsight/insight-ui-webmcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ais_webmcp", "src/webmcp_manifest"]

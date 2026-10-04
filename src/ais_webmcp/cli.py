@@ -1,8 +1,8 @@
 """Django-free WebMCP command line.
 
-``ais-webmcp`` and ``python -m insight_ui_webmcp`` import this module only.
-The console script name is ``ais-webmcp`` (not ``webmcp``). It must not import
-Django (issue #15 tracks the install extra).
+``ais-webmcp`` and ``python -m ais_webmcp`` import this module only.
+The console script name is ``ais-webmcp`` (not ``webmcp``). This distribution
+does not depend on Django.
 
 This build implements ``validate``, ``init``, and ``list``. ``doctor`` stays later.
 """
@@ -13,9 +13,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from insight_ui_webmcp.listing import list_manifests
-from insight_ui_webmcp.scaffold import init_manifest
-from insight_ui_webmcp.validate import exit_code, render, validate_path
+from ais_webmcp.listing import list_manifests
+from ais_webmcp.scaffold import init_manifest
+from webmcp_manifest.validate import exit_code, render, validate_path
 
 
 def build_parser() -> argparse.ArgumentParser:

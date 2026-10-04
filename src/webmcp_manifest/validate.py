@@ -1,10 +1,9 @@
 """Validate WebMCP manifests against the shared JSON Schema.
 
-This module must not import Django. Static hosts and ``ais-webmcp validate`` use it
-directly; ``manage.py webmcp_validate`` calls the same functions. The dependency
-split that removes Django from the package install is issue #15 — until then,
-install with ``--no-deps`` plus ``jsonschema`` and ``pyyaml`` when Django is not
-wanted. The import path itself never loads Django.
+This module must not import Django. It ships in the ``ais-webmcp`` distribution
+(import ``webmcp_manifest``). Static hosts call it through ``ais-webmcp validate``;
+``manage.py webmcp_validate`` calls the same functions. Installing ``ais-webmcp``
+does not install Django.
 """
 
 from __future__ import annotations
@@ -467,10 +466,10 @@ def render(results: list[ValidationResult], fmt: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry for ``python -m insight_ui_webmcp.validate`` (no Django import)."""
+    """Entry for ``python -m webmcp_manifest.validate`` (no Django import)."""
     import sys
 
-    from insight_ui_webmcp.cli import main as cli_main
+    from ais_webmcp.cli import main as cli_main
 
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] != "validate":

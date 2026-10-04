@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from insight_ui_webmcp.manifest import ToolSpec, WebmcpManifest
-from insight_ui_webmcp.profiles import get_profile, list_profiles
-from insight_ui_webmcp.profiles.webpage import WEBPAGE_ANCHORS, WebpageProfile
+from webmcp_manifest.manifest import ToolSpec, WebmcpManifest
+from webmcp_manifest.profiles import get_profile, list_profiles
+from webmcp_manifest.profiles.webpage import WEBPAGE_ANCHORS, WebpageProfile
 
 
 @pytest.mark.unit

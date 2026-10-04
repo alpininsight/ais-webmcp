@@ -12,9 +12,9 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
-from insight_ui_webmcp.profiles import list_profiles
-from insight_ui_webmcp.profiles.webpage import WebpageProfile
-from insight_ui_webmcp.validate import (
+from webmcp_manifest.profiles import list_profiles
+from webmcp_manifest.profiles.webpage import WebpageProfile
+from webmcp_manifest.validate import (
     LIFECYCLE_NOTE,
     builtin_profiles,
     load_schema,
@@ -49,9 +49,14 @@ def _webpage() -> dict:
 def _run_module(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     return subprocess.run(
-        [sys.executable, "-m", "insight_ui_webmcp", *args],
+        [sys.executable, "-m", "ais_webmcp", *args],
         cwd=REPO_ROOT,
         env=env,
         check=False,
@@ -207,9 +212,14 @@ def test_cli_exits_match_fixtures() -> None:
 def test_validate_module_entry_accepts_a_file() -> None:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     proc = subprocess.run(
-        [sys.executable, "-m", "insight_ui_webmcp.validate", str(VALID_YAML)],
+        [sys.executable, "-m", "webmcp_manifest.validate", str(VALID_YAML)],
         cwd=REPO_ROOT,
         env=env,
         check=False,
@@ -224,11 +234,16 @@ def test_validate_module_entry_accepts_a_file() -> None:
 def test_validate_import_does_not_load_django() -> None:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     code = (
         "import sys\n"
-        "import insight_ui_webmcp.cli\n"
-        "import insight_ui_webmcp.validate\n"
+        "import ais_webmcp.cli\n"
+        "import webmcp_manifest.validate\n"
         "assert 'django' not in sys.modules\n"
     )
     proc = subprocess.run(
@@ -246,7 +261,12 @@ def test_validate_import_does_not_load_django() -> None:
 def test_fixture_gate_script() -> None:
     env = os.environ.copy()
     env.pop("DJANGO_SETTINGS_MODULE", None)
-    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
+            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+        ]
+    )
     proc = subprocess.run(
         [sys.executable, str(GATE)],
         cwd=REPO_ROOT,
