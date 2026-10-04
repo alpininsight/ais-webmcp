@@ -370,14 +370,13 @@ describe("InsightUiWebmcp registerTool contract", () => {
   });
 
   it("targets document.modelContext only (no navigator fallback used)", async () => {
-    // Even if navigator.modelContext existed, helper must use document only.
-    globalThis.navigator = {
-      modelContext: {
-        registerTool() {
-          throw new Error("must not use navigator.modelContext");
-        },
+    // Getter-only navigator must not be read; registration stays on document.
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      get() {
+        throw new Error("navigator is getter-only and must not be read");
       },
-    };
+    });
     try {
       const ctx = makeMockContext();
       const api = loadHelper(ctx);
@@ -390,5 +389,228 @@ describe("InsightUiWebmcp registerTool contract", () => {
     } finally {
       delete globalThis.navigator;
     }
+  });
+
+  it("reports a missing browser API instead of succeeding", async () => {
+    const api = loadHelper({});
+    const result = await api.registerTool({
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /unavailable/i);
+  });
+
+  it("counts a synchronous registerTool throw as failure", async () => {
+    const ctx = makeMockContext({
+      onRegister() {
+        throw new Error("sync registration failed");
+      },
+    });
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /sync registration failed/);
+  });
+
+  it("does not keep a tool when the external signal is already aborted", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const ac = new AbortController();
+    ac.abort();
+    const result = await api.registerTool(
+      {
+        id: "go_to_section",
+        name: "Go to section",
+        description: "Scroll to section.",
+        execute: async () => "ok",
+      },
+      { signal: ac.signal }
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.error, /aborted/i);
+    assert.equal((await ctx.getTools()).length, 0);
+  });
+
+  it("replacing a pending registration aborts the previous signal", async () => {
+    const signals = [];
+    const resolvers = [];
+    const ctx = makeMockContext({
+      onRegister(tool, options, tools) {
+        signals.push(options.signal);
+        return new Promise((resolve) => {
+          resolvers.push(() => {
+            if (!options.signal.aborted) {
+              tools.set(tool.name, {
+                name: tool.name,
+                annotations: tool.annotations,
+                execute: tool.execute,
+              });
+            }
+            resolve();
+          });
+        });
+      },
+    });
+    const api = loadHelper(ctx);
+    const spec = {
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => "ok",
+    };
+    const first = api.registerTool(spec);
+    const second = api.registerTool(spec);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(signals.length, 2);
+    assert.equal(signals[0].aborted, true);
+    assert.equal(signals[1].aborted, false);
+    resolvers.forEach((finish) => finish());
+    const firstResult = await first;
+    const secondResult = await second;
+    assert.equal(firstResult.ok, false);
+    assert.match(firstResult.error, /aborted/i);
+    assert.equal(secondResult.ok, true);
+    assert.equal((await ctx.getTools()).length, 1);
+  });
+
+  it("rejects execute immediately when its signal is already aborted", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    await api.registerTool({
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => "ok",
+    });
+    const { tool } = ctx.registerCalls[0];
+    const ac = new AbortController();
+    ac.abort();
+    await assert.rejects(
+      () => tool.execute({ section: "contact" }, { signal: ac.signal }),
+      (err) => err && err.name === "AbortError"
+    );
+  });
+
+  it("unregister does not abort an in-flight execute signal", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    let seenSignal;
+    let release;
+    const started = new Promise((resolve) => {
+      release = resolve;
+    });
+    await api.registerTool({
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: (input, { signal }) => {
+        seenSignal = signal;
+        release();
+        return new Promise((resolve) => {
+          setTimeout(() => resolve("finished"), 20);
+        });
+      },
+    });
+    const { tool } = ctx.registerCalls[0];
+    const execSignal = new AbortController();
+    const pending = tool.execute({ section: "contact" }, { signal: execSignal.signal });
+    await started;
+    assert.equal(api.unregister("go_to_section"), true);
+    assert.equal(seenSignal.aborted, false);
+    assert.equal(await pending, "finished");
+    assert.equal((await ctx.getTools()).length, 0);
+  });
+
+  it("a second init has its own controller map and dispose is idempotent", async () => {
+    const ctx = makeMockContext();
+    const first = loadHelper(ctx);
+    await first.registerTool({
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => "ok",
+    });
+    const second = loadHelper(ctx);
+    assert.equal(second.dispose(), 0);
+    assert.equal((await ctx.getTools()).length, 1);
+    assert.equal(first.dispose(), 1);
+    assert.equal(first.dispose(), 0);
+    assert.equal((await ctx.getTools()).length, 0);
+  });
+
+  it("shared lifecycle abort unregisters every manifest tool (htmx/turbo cleanup)", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const lifecycle = new AbortController();
+    const summary = await api.registerFromManifest(
+      {
+        tools: [
+          { id: "list_sections", name: "List sections", description: "List sections." },
+          { id: "go_to_section", name: "Go to section", description: "Scroll to section." },
+        ],
+      },
+      {
+        list_sections: async () => [],
+        go_to_section: async () => "ok",
+      },
+      { signal: lifecycle.signal }
+    );
+    assert.equal(summary.registered, 2);
+    lifecycle.abort();
+    assert.equal((await ctx.getTools()).length, 0);
+    // Helper map still tracks controllers until dispose; second dispose is a no-op.
+    assert.equal(api.dispose(), 2);
+    assert.equal(api.dispose(), 0);
+  });
+
+  it("does not register subscribe_newsletter by default", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    assert.equal(await api.registerDefaults(), 0);
+    assert.equal(ctx.registerCalls.length, 0);
+
+    const summary = await api.registerFromManifest(
+      {
+        tools: [
+          { id: "list_sections", name: "List sections", description: "List sections." },
+          {
+            id: "subscribe_newsletter",
+            name: "Subscribe newsletter",
+            description: "Subscribe an email.",
+            consequential: true,
+          },
+          { id: "go_to_section", name: "Go to section", description: "Scroll to section." },
+        ],
+      },
+      {
+        list_sections: async () => [],
+        go_to_section: async () => "ok",
+      }
+    );
+    assert.equal(summary.registered, 2);
+    const names = (await ctx.getTools()).map((tool) => tool.name);
+    assert.equal(names.includes("subscribe_newsletter"), false);
+    assert.ok(summary.errors.some((err) => err.name === "subscribe_newsletter"));
+  });
+
+  it("rejects an invalid tool id", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "not a valid id",
+      description: "bad",
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /name must match/i);
+    assert.equal(ctx.registerCalls.length, 0);
   });
 });
