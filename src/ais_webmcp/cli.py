@@ -1,10 +1,9 @@
 """Django-free WebMCP command line.
 
-``ais-webmcp`` and ``python -m ais_webmcp`` import this module only.
-The console script name is ``ais-webmcp`` (not ``webmcp``). This distribution
-does not depend on Django.
+``ais-webmcp`` and ``python -m insight_ui_webmcp`` import this module only.
+The console script name is ``ais-webmcp``. Its package does not require Django.
 
-This build implements ``validate``, ``init``, and ``list``. ``doctor`` stays later.
+All operations use local files; doctor reports configuration evidence only.
 """
 
 from __future__ import annotations
@@ -15,7 +14,13 @@ from pathlib import Path
 
 from ais_webmcp.listing import list_manifests
 from ais_webmcp.scaffold import init_manifest
-from webmcp_manifest.validate import exit_code, render, validate_path
+from ais_webmcp.validate import exit_code, render, validate_path
+
+
+def profile_argument(value: str) -> str:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("profile must be a non-empty string")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ais-webmcp",
         description=(
             "Dev/CI client for WebMCP manifests. No live page, no browser control. "
-            "This build implements validate, init, and list, and does not import Django."
+            "Create, inspect, diagnose, compare and export validated local manifests."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -48,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument(
         "--allow-profile",
         action="append",
+        type=profile_argument,
         default=None,
         help="Additional profile name to accept (repeatable). Built-ins always allowed.",
     )
@@ -96,9 +102,25 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument(
         "--allow-profile",
         action="append",
+        type=profile_argument,
         default=None,
         help="Additional profile name to accept (repeatable). Built-ins always allowed.",
     )
+    for command in ("doctor", "status"):
+        diagnosis = sub.add_parser(command, help="Read-only local host configuration checklist")
+        diagnosis.add_argument("manifest", type=Path)
+        diagnosis.add_argument("--html", type=Path)
+        diagnosis.add_argument("--format", choices=("text", "json"), default="text")
+        diagnosis.add_argument("--allow-profile", action="append", type=profile_argument)
+    diff = sub.add_parser("diff", help="Compare validated manifests; 1 means differences")
+    diff.add_argument("left", type=Path)
+    diff.add_argument("right", type=Path)
+    diff.add_argument("--allow-profile", action="append", type=profile_argument)
+    export = sub.add_parser("export", help="Export a validated manifest without clobbering")
+    export.add_argument("source", type=Path)
+    export.add_argument("--output", "-o", type=Path, required=True)
+    export.add_argument("--force", action="store_true")
+    export.add_argument("--allow-profile", action="append", type=profile_argument)
     return parser
 
 
@@ -112,6 +134,32 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command in {"doctor", "status", "diff", "export"}:
+        import json
+
+        from ais_webmcp.operations import diff_manifests, doctor, export_manifest
+
+        extra = tuple(args.allow_profile or ())
+        if args.command in {"doctor", "status"}:
+            report, code = doctor(args.manifest, html=args.html, extra_profiles=extra)
+            if args.format == "json":
+                sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
+            else:
+                sys.stdout.write(
+                    "".join(f"{r['check']}: {r['status']}\n" for r in report["checks"])
+                    + report["note"]
+                    + "\n"
+                )
+            return code
+        if args.command == "diff":
+            report, code = diff_manifests(args.left, args.right, extra_profiles=extra)
+        else:
+            result = export_manifest(
+                args.source, args.output, force=args.force, extra_profiles=extra
+            )
+            report, code = result.report, result.exit_code
+        sys.stdout.write(report)
+        return code
     if args.command == "validate":
         extra = tuple(args.allow_profile or ())
         results = [validate_path(path, extra_profiles=extra) for path in args.manifests]

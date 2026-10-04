@@ -1,21 +1,31 @@
-# ais-webmcp
+# AIS WebMCP — manage WebMCP for any website
 
-Dev/CI client for WebMCP manifests. Console script: `ais-webmcp`.
+Make your website's capabilities clear to AI agents. `ais-webmcp` is the
+framework-independent PyPI command for creating, validating and maintaining
+WebMCP descriptions in the context of your website.
 
-This distribution does **not** depend on Django. It also ships the shared
-`webmcp_manifest` module (schema, validator, tool dataclasses, built-in
-profiles). That module is not a separate PyPI package.
+Use it with static sites, CMS websites, documentation portals or custom web
+applications. Work with local JSON and YAML manifests, then connect the shared
+browser helper to your website's own content and actions.
+
+**DE:** Das frameworkunabhängige PyPI-Kommando, mit dem Sie WebMCP-Beschreibungen
+für jede Art von Webseite erstellen, prüfen und sinnvoll pflegen können.
 
 ```bash
 pip install ais-webmcp
+ais-webmcp init --output manifest.yaml --static
 ais-webmcp validate manifest.yaml
-ais-webmcp init --output manifest.yaml
 ais-webmcp list manifest.yaml
-python -m ais_webmcp validate manifest.yaml
+ais-webmcp doctor manifest.yaml --html index.html
+ais-webmcp export manifest.yaml --output webmcp.manifest.json
+ais-webmcp diff manifest.yaml webmcp.manifest.json
 ```
 
-`subscribe_newsletter` stays consequential and `enabled: false`. `doctor`,
-`diff`, and `export` are not implemented yet.
+Python 3.12+; Django is not required. `doctor` and `status` report local
+configuration; browser support is verified separately. Existing files are
+protected unless you pass `--force`. Consequential tools stay disabled in
+scaffolds until the host explicitly enables and implements them.
 
-The Django app is the separate distribution `insight-ui-webmcp` (import
-`insight_ui_webmcp`). Docs may call that app `django-insight-ui-webmcp`.
+This package and the `insight-ui-webmcp` Django extension live in the same
+[monorepo](https://github.com/alpininsight/insight-ui-webmcp) and share one schema
+and browser helper. Development preview; the first public release is pending.

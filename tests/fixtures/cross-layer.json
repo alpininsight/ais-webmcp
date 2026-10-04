@@ -1,0 +1,519 @@
+[
+  {
+    "name": "read_only",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": true,
+    "register": true
+  },
+  {
+    "name": "disabled_read_only",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "enabled": false
+        }
+      ]
+    },
+    "valid": true,
+    "register": false
+  },
+  {
+    "name": "hint_requires_enable",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "consequentialHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "hint_disabled",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "consequentialHint": true
+          },
+          "enabled": false
+        }
+      ]
+    },
+    "valid": true,
+    "register": false
+  },
+  {
+    "name": "hint_enabled",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "consequentialHint": true
+          },
+          "enabled": true
+        }
+      ]
+    },
+    "valid": true,
+    "register": true
+  },
+  {
+    "name": "contradictory_flags",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "consequentialHint": true
+          },
+          "consequential": false,
+          "enabled": true
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "contradictory_readonly",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "consequential": true,
+          "enabled": true
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "unknown_annotation",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "debugging": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "string_annotation",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": "true"
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "wrong_flag_type",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "enabled": "true"
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "invalid_schema_required",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "required": "value"
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "invalid_schema_nested_type",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "wrong"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "invalid_schema_limit",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "maxProperties": -1
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "ambiguous_schema",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "parameters": {
+            "type": "object"
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "array_schema",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": [],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "missing_schema",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  },
+  {
+    "name": "parameters",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "valid": true,
+    "register": true
+  },
+  {
+    "name": "input_schema",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "valid": true,
+    "register": true
+  },
+  {
+    "name": "duplicate_ids",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": false,
+    "register": false
+  }
+]

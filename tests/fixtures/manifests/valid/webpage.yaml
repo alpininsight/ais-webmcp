@@ -43,7 +43,7 @@ tools:
     required:
     - section
   annotations:
-    readOnlyHint: true
+    readOnlyHint: false
 - id: get_section
   name: Get section
   description: Return the text content of a named section.
@@ -94,7 +94,7 @@ tools:
     type: object
     properties: {}
   annotations:
-    readOnlyHint: true
+    readOnlyHint: false
 - id: subscribe_newsletter
   name: Subscribe newsletter
   description: Subscribe an email address to the host newsletter.
@@ -120,7 +120,7 @@ tools:
     type: object
     properties: {}
   annotations:
-    readOnlyHint: true
+    readOnlyHint: false
 notes:
 - Hosts should commit webmcp.manifest.json next to the site root or document its deploy
   path.
