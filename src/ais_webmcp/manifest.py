@@ -27,13 +27,29 @@ class ToolSpec:
     input_schema: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a JSON-friendly dict."""
+        """Serialize to a manifest object that satisfies the shared schema.
+
+        Empty parameter specs become an object schema so validate and prepare
+        cannot drift. Consequential tools are written ``enabled: false`` —
+        newsletter and other side effects stay off unless a host edits the
+        file (issue #3). This dataclass cannot opt a tool in.
+        """
         payload = asdict(self)
-        # Prefer a single schema key in the written manifest.
-        schema = payload.pop("input_schema") or payload.pop("parameters") or {}
+        schema = (
+            payload.pop("input_schema")
+            or payload.pop("parameters")
+            or {
+                "type": "object",
+                "properties": {},
+            }
+        )
         payload.pop("parameters", None)
-        if schema:
-            payload["inputSchema"] = schema
+        payload["inputSchema"] = schema
+        if self.consequential:
+            payload["annotations"] = {"readOnlyHint": False, "consequentialHint": True}
+            payload["enabled"] = False
+        else:
+            payload["annotations"] = {"readOnlyHint": True}
         return payload
 
 

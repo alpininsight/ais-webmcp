@@ -1,0 +1,19 @@
+{
+  "profile": "not-a-profile",
+  "version": "1",
+  "tools": [
+    {
+      "id": "list_sections",
+      "name": "List sections",
+      "description": "List available page section anchors on this host.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "consequential": false,
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}

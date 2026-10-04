@@ -1,0 +1,175 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "anchors": [
+    "problem",
+    "integration",
+    "semantics",
+    "trust",
+    "platform",
+    "products",
+    "open-source",
+    "architecture",
+    "contact"
+  ],
+  "tools": [
+    {
+      "id": "list_sections",
+      "name": "List sections",
+      "description": "List available page section anchors on this host.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "go_to_section",
+      "name": "Go to section",
+      "description": "Scroll or navigate the page to a named section anchor.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "description": "Section anchor id",
+            "enum": [
+              "problem",
+              "integration",
+              "semantics",
+              "trust",
+              "platform",
+              "products",
+              "open-source",
+              "architecture",
+              "contact"
+            ]
+          }
+        },
+        "required": [
+          "section"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "get_section",
+      "name": "Get section",
+      "description": "Return the text content of a named section.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "description": "Section anchor id",
+            "enum": [
+              "problem",
+              "integration",
+              "semantics",
+              "trust",
+              "platform",
+              "products",
+              "open-source",
+              "architecture",
+              "contact"
+            ]
+          }
+        },
+        "required": [
+          "section"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "get_company_pitch",
+      "name": "Get company pitch",
+      "description": "Return a short company / product pitch summary.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "get_contact",
+      "name": "Get contact",
+      "description": "Return public contact details for this host.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "open_legal",
+      "name": "Open legal",
+      "description": "Open imprint, privacy, or other legal pages.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "subscribe_newsletter",
+      "name": "Subscribe newsletter",
+      "description": "Subscribe an email address to the host newsletter.",
+      "consequential": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Subscriber email address"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "consequentialHint": true
+      },
+      "enabled": false
+    },
+    {
+      "id": "start_conversation",
+      "name": "Start conversation",
+      "description": "Start an assisted conversation about this host's content.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ],
+  "notes": [
+    "Hosts should commit webmcp.manifest.json next to the site root or document its deploy path.",
+    "Include {% load webmcp_tags %}{% webmcp_assets %} in base.html.",
+    "subscribe_newsletter is consequential and ships enabled false; do not opt in by default."
+  ]
+}
