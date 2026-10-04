@@ -371,40 +371,52 @@ def _load_yaml(text: str) -> Any:
     return yaml.safe_load(text)
 
 
-def validate_path(
-    path: Path | str,
-    *,
-    extra_profiles: tuple[str, ...] | list[str] = (),
-) -> ValidationResult:
-    """Load ``path`` as JSON or YAML and validate it."""
+def load_manifest(path: Path | str) -> tuple[Any, ValidationResult | None]:
+    """Read a JSON or YAML manifest without validating it.
+
+    Returns ``(data, None)`` when the file parses, or ``(None, fatal)`` when
+    it is missing, empty, or the wrong type. Does not import Django.
+    """
     source = Path(path)
     display = str(source)
     if source.suffix.lower() not in _JSON_SUFFIXES | _YAML_SUFFIXES:
-        return _fatal(display, "unsupported manifest type; use .json, .yaml, or .yml")
+        return None, _fatal(display, "unsupported manifest type; use .json, .yaml, or .yml")
     try:
         text = source.read_text(encoding="utf-8")
     except OSError as exc:
-        return _fatal(display, f"cannot read manifest: {exc.strerror or exc}")
+        return None, _fatal(display, f"cannot read manifest: {exc.strerror or exc}")
     if not text.strip():
-        return _fatal(display, "manifest file is empty")
+        return None, _fatal(display, "manifest file is empty")
     try:
         if source.suffix.lower() in _YAML_SUFFIXES:
             data = _load_yaml(text)
         else:
             data = json.loads(text)
     except RuntimeError as exc:
-        return _fatal(display, str(exc))
+        return None, _fatal(display, str(exc))
     except json.JSONDecodeError as exc:
-        return _fatal(display, f"invalid JSON: {exc.msg} (line {exc.lineno})")
+        return None, _fatal(display, f"invalid JSON: {exc.msg} (line {exc.lineno})")
     except Exception as exc:
         # PyYAML raises yaml.YAMLError, which we must not require at import time.
         name = type(exc).__name__
         if name == "YAMLError" or type(exc).__module__.startswith("yaml"):
-            return _fatal(display, f"invalid YAML: {exc}")
+            return None, _fatal(display, f"invalid YAML: {exc}")
         raise
     if data is None:
-        return _fatal(display, "manifest file is empty")
-    return validate_data(data, source=display, extra_profiles=extra_profiles)
+        return None, _fatal(display, "manifest file is empty")
+    return data, None
+
+
+def validate_path(
+    path: Path | str,
+    *,
+    extra_profiles: tuple[str, ...] | list[str] = (),
+) -> ValidationResult:
+    """Load ``path`` as JSON or YAML and validate it."""
+    data, fatal = load_manifest(path)
+    if fatal is not None:
+        return fatal
+    return validate_data(data, source=str(Path(path)), extra_profiles=extra_profiles)
 
 
 def exit_code(results: list[ValidationResult]) -> int:
