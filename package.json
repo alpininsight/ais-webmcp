@@ -1,0 +1,17 @@
+{
+  "name": "insight-ui-webmcp-assets",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build:js": "node scripts/build-js.cjs",
+    "check:js-build": "node scripts/build-js.cjs --check",
+    "test": "node --test tests/js/*.test.js"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.9"
+  }
+}

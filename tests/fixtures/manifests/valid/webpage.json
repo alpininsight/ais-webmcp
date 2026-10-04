@@ -55,7 +55,7 @@
         ]
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": false
       }
     },
     {
@@ -126,7 +126,7 @@
         "properties": {}
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": false
       }
     },
     {
@@ -163,7 +163,7 @@
         "properties": {}
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": false
       }
     }
   ],

@@ -1,12 +1,5 @@
-"""Django-free Dev/CI client for WebMCP manifests.
+"""Django-free WebMCP client and shared contract."""
 
-The console script is ``ais-webmcp``. Shared schema and validation live in
-``webmcp_manifest``, which this distribution also ships. Neither import loads
-Django.
-"""
+from importlib.metadata import version
 
-from __future__ import annotations
-
-__version__ = "0.0.0"
-
-__all__ = ["__version__"]
+__version__ = version("ais-webmcp")

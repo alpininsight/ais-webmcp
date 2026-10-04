@@ -8,9 +8,11 @@ const { describe, it, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const REGISTER_JS = path.resolve(
-  __dirname,
-  "../../packages/insight-ui-webmcp/src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js"
+const REGISTER_JS = require("node:fs").realpathSync(
+  path.resolve(
+    __dirname,
+    "../../packages/insight-ui-webmcp/src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js",
+  ),
 );
 
 /**
@@ -75,7 +77,7 @@ function makeMockContext(opts) {
             () => {
               tools.delete(tool.name);
             },
-            { once: true }
+            { once: true },
           );
         }
         tools.set(tool.name, entry);
@@ -84,7 +86,7 @@ function makeMockContext(opts) {
     },
     async getTools() {
       return Array.from(tools.values()).sort((a, b) =>
-        a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+        a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
       );
     },
   };
@@ -103,7 +105,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll or navigate the page to a named section anchor.",
       inputSchema: {
@@ -112,6 +116,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
         required: ["section"],
       },
       consequential: true,
+      enabled: true,
       execute: async () => "ok",
     });
 
@@ -124,7 +129,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(tool.title, "Go to section");
     assert.equal(
       tool.description,
-      "Scroll or navigate the page to a named section anchor."
+      "Scroll or navigate the page to a named section anchor.",
     );
     assert.deepEqual(tool.inputSchema.required, ["section"]);
     assert.equal(typeof tool.execute, "function");
@@ -139,11 +144,12 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(listed[0].name, "go_to_section");
   });
 
-  it("sets readOnlyHint by default when not consequential", async () => {
+  it("does not assume readOnlyHint when not consequential", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
 
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "list_sections",
       name: "List sections",
       description: "List available page section anchors on this host.",
@@ -151,7 +157,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     });
 
     const { tool } = ctx.registerCalls[0];
-    assert.equal(tool.annotations.readOnlyHint, true);
+    assert.equal(tool.annotations.readOnlyHint, false);
     assert.equal(tool.annotations.consequentialHint, undefined);
     assert.equal("consequential" in tool, false);
   });
@@ -161,6 +167,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "get_section",
       name: "Get section",
       description: "Return the text content of a named section.",
@@ -178,7 +185,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
     });
@@ -193,7 +202,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "   ",
       execute: async () => "ok",
@@ -209,6 +220,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -226,7 +238,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -244,7 +258,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     const ok = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -261,11 +277,13 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "a_tool",
       description: "A",
       execute: async () => 1,
     });
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "b_tool",
       description: "B",
       execute: async () => 2,
@@ -284,7 +302,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const api = loadHelper(ctx);
 
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -299,19 +319,26 @@ describe("InsightUiWebmcp registerTool contract", () => {
 
     const summary = await api.registerFromManifest(
       {
+        profile: "webpage",
+        version: "1",
         tools: [
           {
+            inputSchema: { type: "object" },
             id: "go_to_section",
+            inputSchema: { type: "object" },
             name: "Go to section",
             description: "Scroll to section.",
           },
           {
+            inputSchema: { type: "object" },
             id: "subscribe_newsletter",
             name: "Subscribe newsletter",
             description: "Subscribe an email.",
             consequential: true,
+            enabled: true,
           },
           {
+            inputSchema: { type: "object" },
             id: "list_sections",
             name: "List sections",
             description: "List sections.",
@@ -321,7 +348,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
       {
         go_to_section: async ({ section }) => section,
         subscribe_newsletter: async ({ email }) => email,
-      }
+      },
     );
 
     assert.equal(summary.registered, 2);
@@ -330,10 +357,10 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.match(summary.errors[0].error, /execute/i);
 
     const listed = await ctx.getTools();
-    assert.deepEqual(
-      listed.map((t) => t.name).sort(),
-      ["go_to_section", "subscribe_newsletter"]
-    );
+    assert.deepEqual(listed.map((t) => t.name).sort(), [
+      "go_to_section",
+      "subscribe_newsletter",
+    ]);
     const sub = listed.find((t) => t.name === "subscribe_newsletter");
     assert.equal(sub.annotations.consequentialHint, true);
     assert.equal("consequential" in sub, false);
@@ -346,7 +373,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     let seenSignal;
 
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async (input, { signal }) => {
@@ -358,7 +387,10 @@ describe("InsightUiWebmcp registerTool contract", () => {
 
     const { tool } = ctx.registerCalls[0];
     const ac = new AbortController();
-    const out = await tool.execute({ section: "contact" }, { signal: ac.signal });
+    const out = await tool.execute(
+      { section: "contact" },
+      { signal: ac.signal },
+    );
     assert.equal(out, "done");
     assert.deepEqual(seenInput, { section: "contact" });
     assert.equal(seenSignal, ac.signal);
@@ -381,6 +413,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
       const ctx = makeMockContext();
       const api = loadHelper(ctx);
       await api.registerTool({
+        inputSchema: { type: "object" },
         id: "ok_tool",
         description: "ok",
         execute: async () => "ok",
@@ -394,7 +427,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
   it("reports a missing browser API instead of succeeding", async () => {
     const api = loadHelper({});
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -411,7 +446,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     });
     const api = loadHelper(ctx);
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -427,12 +464,14 @@ describe("InsightUiWebmcp registerTool contract", () => {
     ac.abort();
     const result = await api.registerTool(
       {
+        inputSchema: { type: "object" },
         id: "go_to_section",
+        inputSchema: { type: "object" },
         name: "Go to section",
         description: "Scroll to section.",
         execute: async () => "ok",
       },
-      { signal: ac.signal }
+      { signal: ac.signal },
     );
     assert.equal(result.ok, false);
     assert.match(result.error, /aborted/i);
@@ -461,7 +500,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     });
     const api = loadHelper(ctx);
     const spec = {
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -485,7 +526,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -495,7 +538,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     ac.abort();
     await assert.rejects(
       () => tool.execute({ section: "contact" }, { signal: ac.signal }),
-      (err) => err && err.name === "AbortError"
+      (err) => err && err.name === "AbortError",
     );
   });
 
@@ -508,7 +551,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
       release = resolve;
     });
     await api.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: (input, { signal }) => {
@@ -521,7 +566,10 @@ describe("InsightUiWebmcp registerTool contract", () => {
     });
     const { tool } = ctx.registerCalls[0];
     const execSignal = new AbortController();
-    const pending = tool.execute({ section: "contact" }, { signal: execSignal.signal });
+    const pending = tool.execute(
+      { section: "contact" },
+      { signal: execSignal.signal },
+    );
     await started;
     assert.equal(api.unregister("go_to_section"), true);
     assert.equal(seenSignal.aborted, false);
@@ -533,7 +581,9 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const ctx = makeMockContext();
     const first = loadHelper(ctx);
     await first.registerTool({
+      inputSchema: { type: "object" },
       id: "go_to_section",
+      inputSchema: { type: "object" },
       name: "Go to section",
       description: "Scroll to section.",
       execute: async () => "ok",
@@ -552,16 +602,28 @@ describe("InsightUiWebmcp registerTool contract", () => {
     const lifecycle = new AbortController();
     const summary = await api.registerFromManifest(
       {
+        profile: "webpage",
+        version: "1",
         tools: [
-          { id: "list_sections", name: "List sections", description: "List sections." },
-          { id: "go_to_section", name: "Go to section", description: "Scroll to section." },
+          {
+            inputSchema: { type: "object" },
+            id: "list_sections",
+            name: "List sections",
+            description: "List sections.",
+          },
+          {
+            inputSchema: { type: "object" },
+            id: "go_to_section",
+            name: "Go to section",
+            description: "Scroll to section.",
+          },
         ],
       },
       {
         list_sections: async () => [],
         go_to_section: async () => "ok",
       },
-      { signal: lifecycle.signal }
+      { signal: lifecycle.signal },
     );
     assert.equal(summary.registered, 2);
     lifecycle.abort();
@@ -579,32 +641,49 @@ describe("InsightUiWebmcp registerTool contract", () => {
 
     const summary = await api.registerFromManifest(
       {
+        profile: "webpage",
+        version: "1",
         tools: [
-          { id: "list_sections", name: "List sections", description: "List sections." },
           {
+            inputSchema: { type: "object" },
+            id: "list_sections",
+            name: "List sections",
+            description: "List sections.",
+          },
+          {
+            inputSchema: { type: "object" },
             id: "subscribe_newsletter",
             name: "Subscribe newsletter",
             description: "Subscribe an email.",
             consequential: true,
+            enabled: false,
           },
-          { id: "go_to_section", name: "Go to section", description: "Scroll to section." },
+          {
+            inputSchema: { type: "object" },
+            id: "go_to_section",
+            name: "Go to section",
+            description: "Scroll to section.",
+          },
         ],
       },
       {
         list_sections: async () => [],
         go_to_section: async () => "ok",
-      }
+      },
     );
     assert.equal(summary.registered, 2);
     const names = (await ctx.getTools()).map((tool) => tool.name);
     assert.equal(names.includes("subscribe_newsletter"), false);
-    assert.ok(summary.errors.some((err) => err.name === "subscribe_newsletter"));
+    assert.ok(
+      summary.errors.some((err) => err.name === "subscribe_newsletter"),
+    );
   });
 
   it("rejects an invalid tool id", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
     const result = await api.registerTool({
+      inputSchema: { type: "object" },
       id: "not a valid id",
       description: "bad",
       execute: async () => "ok",
