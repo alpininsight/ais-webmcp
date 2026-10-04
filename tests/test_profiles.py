@@ -53,6 +53,14 @@ def test_webpage_tool_ids() -> None:
     }
     subscribe = next(t for t in tools if t.id == "subscribe_newsletter")
     assert subscribe.consequential is True
+    serialized = next(
+        tool
+        for tool in WebpageProfile().build_manifest().to_dict()["tools"]
+        if tool["id"] == "subscribe_newsletter"
+    )
+    assert serialized["enabled"] is False
+    assert serialized["annotations"]["consequentialHint"] is True
+    assert serialized["annotations"]["readOnlyHint"] is False
 
 
 @pytest.mark.unit

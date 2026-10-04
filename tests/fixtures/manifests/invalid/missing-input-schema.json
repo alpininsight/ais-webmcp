@@ -1,0 +1,15 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "tools": [
+    {
+      "id": "list_sections",
+      "name": "List sections",
+      "description": "List available page section anchors on this host.",
+      "consequential": false,
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}

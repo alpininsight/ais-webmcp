@@ -1,0 +1,28 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "tools": [
+    {
+      "id": "subscribe_newsletter",
+      "name": "Subscribe newsletter",
+      "description": "Subscribe an email address to the host newsletter.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "consequential": true,
+      "annotations": {
+        "readOnlyHint": false,
+        "consequentialHint": true
+      }
+    }
+  ]
+}

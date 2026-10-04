@@ -1,0 +1,18 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "tools": [
+    {
+      "id": "list_sections",
+      "name": "List sections",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "consequential": false,
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}
