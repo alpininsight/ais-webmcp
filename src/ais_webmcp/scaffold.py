@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from insight_ui_webmcp.profiles.webpage import WebpageProfile
-from insight_ui_webmcp.validate import validate_data
+from webmcp_manifest.profiles.webpage import WebpageProfile
+from webmcp_manifest.validate import validate_data
 
 _MANIFEST_SUFFIXES = {".json", ".yaml", ".yml"}
 _DEFAULT_NAME = "manifest.yaml"
@@ -134,7 +134,7 @@ def render_manifest(payload: dict[str, Any], suffix: str) -> str:
         except ImportError as exc:
             raise RuntimeError(
                 "PyYAML is required to write a YAML manifest. "
-                "Install pyyaml (Django is not required; see issue #15)."
+                "It is a dependency of the ais-webmcp distribution (Django is not)."
             ) from exc
         body = yaml.safe_dump(
             payload,

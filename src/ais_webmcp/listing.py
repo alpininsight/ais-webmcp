@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from insight_ui_webmcp.validate import (
+from webmcp_manifest.validate import (
     ValidationResult,
     exit_code,
     load_manifest,

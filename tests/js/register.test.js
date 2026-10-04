@@ -10,7 +10,7 @@ const path = require("node:path");
 
 const REGISTER_JS = path.resolve(
   __dirname,
-  "../../src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js"
+  "../../packages/insight-ui-webmcp/src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js"
 );
 
 /**
