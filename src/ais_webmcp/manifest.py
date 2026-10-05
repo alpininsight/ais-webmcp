@@ -22,6 +22,10 @@ class ToolSpec:
             Written only when ``to_dict(include_debugging=True)``; never inferred
             from Django ``DEBUG`` or ``window.JS_DEBUG``.
         group: Optional molecule name for Atomic Design listing (#20).
+        untrusted_content: Tool output carries data from external or
+            unverified sources (WebMCP ``annotations.untrustedContentHint``,
+            Chrome 149+). Emitted only when True; first-party page content
+            stays unmarked.
     """
 
     id: str
@@ -33,6 +37,7 @@ class ToolSpec:
     read_only: bool = False
     debugging: bool = False
     group: str | None = None
+    untrusted_content: bool = False
 
     def to_dict(self, *, include_debugging: bool = False) -> dict[str, Any]:
         """Serialize to a manifest object that satisfies the shared schema.
@@ -50,6 +55,7 @@ class ToolSpec:
         payload.pop("read_only")
         debugging = payload.pop("debugging")
         group = payload.pop("group")
+        untrusted_content = payload.pop("untrusted_content")
         schema = (
             payload.pop("input_schema")
             or payload.pop("parameters")
@@ -65,6 +71,8 @@ class ToolSpec:
             payload["enabled"] = False
         else:
             annotations = {"readOnlyHint": self.read_only}
+        if untrusted_content:
+            annotations["untrustedContentHint"] = True
         if debugging and include_debugging:
             annotations["debugging"] = True
         payload["annotations"] = annotations
