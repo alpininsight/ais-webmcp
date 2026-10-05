@@ -928,3 +928,114 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(ctx.registerCalls.length, 0);
   });
 });
+
+/**
+ * Chrome 155+ shape: RegisteredTool.inputSchema is a JS object and
+ * executeTool(registeredTool, inputObject) takes the object from getTools(),
+ * never a tool name and never a JSON string (EPP 2026-09-10 / 2026-09-11).
+ */
+describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
+  afterEach(() => {
+    delete require.cache[REGISTER_JS];
+    delete globalThis.document;
+    delete globalThis.InsightUiWebmcp;
+  });
+
+  function withExecuteTool(ctx) {
+    const registered = new WeakSet();
+    const baseGetTools = ctx.getTools;
+    ctx.getTools = async function () {
+      const listed = await baseGetTools.call(ctx);
+      return listed.map((entry) => {
+        // RegisteredTool: deep copy of the registration schema, as an object.
+        const tool = Object.freeze({
+          name: entry.name,
+          title: entry.title,
+          description: entry.description,
+          inputSchema: structuredClone(entry.inputSchema),
+          annotations: entry.annotations,
+        });
+        registered.add(tool);
+        return tool;
+      });
+    };
+    ctx.executeTool = async function (tool, input) {
+      if (!tool || typeof tool !== "object" || !registered.has(tool)) {
+        throw new TypeError("parameter 1 is not of type 'RegisteredTool'");
+      }
+      if (input !== undefined && (input === null || typeof input !== "object")) {
+        throw new TypeError("Failed to parse input");
+      }
+      const entry = ctx.tools.get(tool.name);
+      return entry.execute(structuredClone(input || {}), {
+        signal: new AbortController().signal,
+      });
+    };
+    return ctx;
+  }
+
+  it("registers inputSchema as an object and executes with an object input", async () => {
+    const ctx = withExecuteTool(makeMockContext());
+    const api = loadHelper(ctx);
+    const schema = {
+      type: "object",
+      properties: { section: { type: "string", enum: ["trust"] } },
+      required: ["section"],
+    };
+    const seen = [];
+    const result = await api.registerTool({
+      id: "get_section",
+      description: "Return the rendered text of one public section.",
+      inputSchema: schema,
+      annotations: { readOnlyHint: true },
+      execute: async (input, options) => {
+        seen.push({ input, options });
+        return "section text";
+      },
+    });
+    assert.equal(result.ok, true);
+
+    const { tool: payload } = ctx.registerCalls[0];
+    assert.equal(typeof payload.inputSchema, "object");
+    assert.deepEqual(payload.inputSchema, schema);
+
+    const [registeredTool] = await ctx.getTools();
+    assert.equal(typeof registeredTool.inputSchema, "object");
+    assert.deepEqual(registeredTool.inputSchema, schema);
+
+    const output = await ctx.executeTool(registeredTool, { section: "trust" });
+    assert.equal(output, "section text");
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0].input, { section: "trust" });
+    assert.equal(seen[0].options.signal instanceof AbortSignal, true);
+  });
+
+  it("a tool name or a JSON string is not the executeTool contract", async () => {
+    const ctx = withExecuteTool(makeMockContext());
+    const api = loadHelper(ctx);
+    let calls = 0;
+    await api.registerTool({
+      id: "list_sections",
+      description: "List public section anchors.",
+      inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: true },
+      execute: async () => {
+        calls += 1;
+        return [];
+      },
+    });
+    const [registeredTool] = await ctx.getTools();
+
+    await assert.rejects(
+      ctx.executeTool("list_sections", "{}"),
+      /RegisteredTool/,
+    );
+    await assert.rejects(
+      ctx.executeTool(registeredTool, "{}"),
+      /Failed to parse input/,
+    );
+    assert.equal(calls, 0);
+    assert.deepEqual(await ctx.executeTool(registeredTool, {}), []);
+    assert.equal(calls, 1);
+  });
+});
