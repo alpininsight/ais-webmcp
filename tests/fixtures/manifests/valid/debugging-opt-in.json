@@ -1,0 +1,20 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "tools": [
+    {
+      "id": "inspect_dom_snapshot",
+      "name": "Inspect DOM snapshot",
+      "description": "DevTools-only snapshot helper for local diagnosis.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "consequential": false,
+      "annotations": {
+        "readOnlyHint": true,
+        "debugging": true
+      }
+    }
+  ]
+}

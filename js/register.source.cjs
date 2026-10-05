@@ -326,6 +326,7 @@
     take("readOnlyHint", src.readOnlyHint);
     take("untrustedContentHint", src.untrustedContentHint);
     take("consequentialHint", src.consequentialHint);
+    take("debugging", src.debugging);
 
     // Legacy manifest / host field → annotations.consequentialHint
     if (
@@ -389,6 +390,7 @@
       "readOnlyHint",
       "consequentialHint",
       "untrustedContentHint",
+      "debugging",
     ];
     if (
       Object.keys(spec.annotations || {}).some(function (key) {

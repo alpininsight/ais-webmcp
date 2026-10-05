@@ -120,6 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
             help="Optional local HTML file. Remote URLs are refused.",
         )
         diagnosis.add_argument("--format", choices=("text", "json"), default="text")
+        diagnosis.add_argument(
+            "--tree",
+            action="store_true",
+            help="Print Atomic Design grouping: atom → molecule → organism (tool.group).",
+        )
         diagnosis.add_argument("--allow-profile", action="append", type=profile_argument)
     diff = sub.add_parser("diff", help="Compare validated manifests; 1 means differences")
     diff.add_argument("left", type=Path)
@@ -159,17 +164,27 @@ def main(argv: list[str] | None = None) -> int:
 
         extra = tuple(args.allow_profile or ())
         if args.command in {"doctor", "status"}:
-            report, code = doctor(args.manifest, html=args.html, extra_profiles=extra)
+            report, code = doctor(
+                args.manifest,
+                html=args.html,
+                extra_profiles=extra,
+                tree=args.tree,
+            )
             if args.format == "json":
                 sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
             else:
+                from ais_webmcp.operations import format_atomic_tree
+
                 lines = []
                 for row in report["checks"]:
                     line = f"{row['check']}: {row['status']}"
                     if row.get("detail"):
                         line = f"{line} ({row['detail']})"
                     lines.append(line)
-                sys.stdout.write("\n".join(lines) + "\n" + report["note"] + "\n")
+                body = "\n".join(lines) + "\n" + report["note"] + "\n"
+                if report.get("tree"):
+                    body = body + format_atomic_tree(report["tree"])
+                sys.stdout.write(body)
             return code
         if args.command == "diff":
             report, code = diff_manifests(args.left, args.right, extra_profiles=extra)

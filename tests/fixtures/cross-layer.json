@@ -214,13 +214,41 @@
             }
           },
           "annotations": {
-            "debugging": true
+            "notARealHint": true
           }
         }
       ]
     },
     "valid": false,
     "register": false
+  },
+  {
+    "name": "debugging_opt_in",
+    "manifest": {
+      "profile": "webpage",
+      "version": "1",
+      "tools": [
+        {
+          "id": "probe",
+          "name": "Probe",
+          "description": "Contract probe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "debugging": true,
+            "readOnlyHint": true
+          }
+        }
+      ]
+    },
+    "valid": true,
+    "register": true
   },
   {
     "name": "string_annotation",

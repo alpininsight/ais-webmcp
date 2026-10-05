@@ -2,10 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:insight-ui-webmcp:webmcp-manifest:1",
   "title": "WebMCP tool manifest",
-  "description": "Single source of truth for a WebMCP host manifest, shared by Django profiles and static pages. The canonical parameter object is inputSchema; parameters and input_schema are accepted aliases but only one may be set. register.js accepts all three keys and requires exactly one. annotations.debugging is intentionally not allowed (issue #9). A consequential tool must set enabled explicitly (true or false). subscribe_newsletter and other subscribe_* tools stay consequential and ship enabled false unless the host opts in (issue #3). Unregister is AbortController / { signal } on registerTool, not unregisterTool (issue #11). This schema does not execute tools and is not a live-page CRUD API.",
+  "description": "Single source of truth for a WebMCP host manifest, shared by Django profiles and static pages. The canonical parameter object is inputSchema; parameters and input_schema are accepted aliases but only one may be set. register.js accepts all three keys and requires exactly one. annotations.debugging marks a tool that is itself for DevTools/inspection (issue #9). It is allowed only when the host sets it explicitly; prepare never copies Django DEBUG or JS_DEBUG into annotations. Optional tool.group names the molecule for Atomic Design listing (issue #20); doctor --tree prints atom → molecule → organism. A consequential tool must set enabled explicitly (true or false). subscribe_newsletter and other subscribe_* tools stay consequential and ship enabled false unless the host opts in (issue #3). Unregister is AbortController / { signal } on registerTool, not unregisterTool (issue #11). This schema does not execute tools and is not a live-page CRUD API.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["profile", "version", "tools"],
+  "required": [
+    "profile",
+    "version",
+    "tools"
+  ],
   "properties": {
     "$schema": {
       "type": "string",
@@ -14,7 +18,9 @@
     "profile": {
       "type": "string",
       "minLength": 1,
-      "enum": ["webpage"],
+      "enum": [
+        "webpage"
+      ],
       "description": "Built-in profile name. Host-specific names are rejected unless the validator is given them explicitly. Keep this enum aligned with ais_webmcp.profiles."
     },
     "version": {
@@ -47,7 +53,10 @@
     "tool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "description"],
+      "required": [
+        "name",
+        "description"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -84,6 +93,11 @@
           "type": "boolean",
           "description": "Explicit host opt-in. Required when consequential is true. false is valid and is the shipped default for subscribe_newsletter."
         },
+        "group": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional molecule name for Atomic Design grouping (issue #20). Atoms (tools) share a group when reviewers should treat them together; the organism is the profile's enabled toolset. doctor --tree prints atom → molecule → organism."
+        },
         "annotations": {
           "$ref": "#/$defs/annotations"
         }
@@ -94,7 +108,9 @@
         },
         {
           "if": {
-            "required": ["consequential"],
+            "required": [
+              "consequential"
+            ],
             "properties": {
               "consequential": {
                 "const": true
@@ -102,13 +118,17 @@
             }
           },
           "then": {
-            "required": ["enabled"]
+            "required": [
+              "enabled"
+            ]
           }
         },
         {
           "if": {
             "not": {
-              "required": ["id"]
+              "required": [
+                "id"
+              ]
             }
           },
           "then": {
@@ -128,21 +148,27 @@
       "description": "Exactly one of inputSchema, parameters, input_schema.",
       "oneOf": [
         {
-          "required": ["inputSchema"],
+          "required": [
+            "inputSchema"
+          ],
           "properties": {
             "parameters": false,
             "input_schema": false
           }
         },
         {
-          "required": ["parameters"],
+          "required": [
+            "parameters"
+          ],
           "properties": {
             "inputSchema": false,
             "input_schema": false
           }
         },
         {
-          "required": ["input_schema"],
+          "required": [
+            "input_schema"
+          ],
           "properties": {
             "inputSchema": false,
             "parameters": false
@@ -162,6 +188,10 @@
         },
         "untrustedContentHint": {
           "type": "boolean"
+        },
+        "debugging": {
+          "type": "boolean",
+          "description": "Tool is itself for developer/DevTools/inspection use (WebMCP ToolAnnotations.debugging). Explicit host opt-in only; never inferred from Django DEBUG or window.JS_DEBUG (issue #9)."
         }
       }
     }

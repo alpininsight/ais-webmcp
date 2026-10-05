@@ -13,7 +13,7 @@
       "consequential": false,
       "annotations": {
         "readOnlyHint": true,
-        "debugging": true
+        "notARealHint": true
       }
     }
   ]

@@ -33,7 +33,7 @@ EXPECTED = {
     "duplicate-id.json": "duplicate tool id",
     "consequential-without-enable.json": "without explicit enable",
     "missing-input-schema.json": "missing inputSchema",
-    "unknown-annotation.json": "unknown annotation key 'debugging'",
+    "unknown-annotation.json": "unknown annotation key 'notARealHint'",
     "ambiguous-schema-keys.json": "ambiguous schema keys",
     "unknown-profile.json": "unknown profile",
     "input-schema-not-object.json": "must be a JSON object",
@@ -71,7 +71,7 @@ def test_schema_file_is_draft_2020_12() -> None:
     Draft202012Validator.check_schema(schema)
     assert schema["$id"] == "urn:insight-ui-webmcp:webmcp-manifest:1"
     assert schema_path().is_file()
-    assert "debugging" not in schema["$defs"]["annotations"]["properties"]
+    assert "debugging" in schema["$defs"]["annotations"]["properties"]
 
 
 @pytest.mark.unit
@@ -276,3 +276,32 @@ def test_fixture_gate_script() -> None:
         text=True,
     )
     assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+@pytest.mark.unit
+def test_debugging_annotation_is_allowed_when_explicit() -> None:
+    """Host-opted debugging tools validate; production webpage fixture stays clean (#9)."""
+    payload = _webpage()
+    assert all(not (tool.get("annotations") or {}).get("debugging") for tool in payload["tools"])
+    debug_path = REPO_ROOT / "tests" / "fixtures" / "manifests" / "valid" / "debugging-opt-in.json"
+    result = validate_path(debug_path)
+    assert result.ok, result.issues
+    data = json.loads(debug_path.read_text(encoding="utf-8"))
+    assert data["tools"][0]["annotations"]["debugging"] is True
+
+
+@pytest.mark.unit
+def test_toolspec_never_emits_debugging_without_opt_in() -> None:
+    from webmcp_manifest.manifest import ToolSpec
+
+    tool = ToolSpec(
+        id="inspect_dom_snapshot",
+        name="Inspect",
+        description="Dev only",
+        read_only=True,
+        debugging=True,
+    )
+    plain = tool.to_dict()
+    assert "debugging" not in plain["annotations"]
+    opted = tool.to_dict(include_debugging=True)
+    assert opted["annotations"]["debugging"] is True
