@@ -20,6 +20,7 @@ tools:
     properties: {}
   annotations:
     readOnlyHint: true
+  group: navigation
 - id: go_to_section
   name: Go to section
   description: Scroll or navigate the page to a named section anchor.
@@ -44,6 +45,7 @@ tools:
     - section
   annotations:
     readOnlyHint: false
+  group: navigation
 - id: get_section
   name: Get section
   description: Return the text content of a named section.
@@ -68,6 +70,7 @@ tools:
     - section
   annotations:
     readOnlyHint: true
+  group: content
 - id: get_company_pitch
   name: Get company pitch
   description: Return a short company / product pitch summary.
@@ -77,6 +80,7 @@ tools:
     properties: {}
   annotations:
     readOnlyHint: true
+  group: content
 - id: get_contact
   name: Get contact
   description: Return public contact details for this host.
@@ -86,6 +90,7 @@ tools:
     properties: {}
   annotations:
     readOnlyHint: true
+  group: legal_contact
 - id: open_legal
   name: Open legal
   description: Open imprint, privacy, or other legal pages.
@@ -95,6 +100,7 @@ tools:
     properties: {}
   annotations:
     readOnlyHint: false
+  group: legal_contact
 - id: subscribe_newsletter
   name: Subscribe newsletter
   description: Subscribe an email address to the host newsletter.
@@ -108,10 +114,11 @@ tools:
         description: Subscriber email address
     required:
     - email
+  enabled: false
   annotations:
     readOnlyHint: false
     consequentialHint: true
-  enabled: false
+  group: consequential
 - id: start_conversation
   name: Start conversation
   description: Start an assisted conversation about this host's content.
@@ -121,6 +128,7 @@ tools:
     properties: {}
   annotations:
     readOnlyHint: false
+  group: legal_contact
 notes:
 - Hosts should commit webmcp.manifest.json next to the site root or document its deploy
   path.

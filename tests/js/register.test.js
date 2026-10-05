@@ -180,6 +180,42 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(tool.annotations.readOnlyHint, true);
   });
 
+  it("passes through annotations.debugging when the host sets it explicitly (#9)", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "inspect_dom_snapshot",
+      name: "Inspect DOM snapshot",
+      description: "DevTools-only snapshot helper.",
+      annotations: { debugging: true, readOnlyHint: true },
+      execute: async () => null,
+    });
+
+    const { tool } = ctx.registerCalls[0];
+    assert.equal(tool.annotations.debugging, true);
+    assert.equal(tool.annotations.readOnlyHint, true);
+  });
+
+  it("rejects unknown annotation keys including typos of debugging", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+
+    const result = await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "inspect_dom_snapshot",
+      name: "Inspect",
+      description: "Dev only.",
+      annotations: { debuging: true, readOnlyHint: true },
+      execute: async () => null,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error, /annotation/i);
+    assert.equal(ctx.registerCalls.length, 0);
+  });
+
   it("rejects tools without execute and does not call registerTool", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

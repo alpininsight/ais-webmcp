@@ -38,6 +38,62 @@ _CSP_HEADER = re.compile(
 _IGNORED_HEADER_VALUES = frozenset({"header", "tag", "meta"})
 
 
+def atomic_tree(data: dict) -> dict:
+    """Build atom → molecule → organism grouping from a validated manifest.
+
+    ``group`` is the molecule name. Tools without ``group`` sit under
+    ``(ungrouped)``. The organism is the profile name (enabled toolset).
+    """
+    organism = data.get("profile") if isinstance(data.get("profile"), str) else ""
+    buckets: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for tool in data.get("tools") or []:
+        if not isinstance(tool, dict):
+            continue
+        raw_group = tool.get("group")
+        molecule = (
+            raw_group.strip() if isinstance(raw_group, str) and raw_group.strip() else "(ungrouped)"
+        )
+        token = (
+            tool.get("id")
+            if isinstance(tool.get("id"), str) and tool.get("id")
+            else tool.get("name")
+        )
+        atom = {
+            "id": token if isinstance(token, str) else "",
+            "name": tool.get("name") if isinstance(tool.get("name"), str) else "",
+            "enabled": tool.get("enabled") if isinstance(tool.get("enabled"), bool) else None,
+            "consequential": bool(tool.get("consequential")),
+        }
+        if molecule not in buckets:
+            buckets[molecule] = []
+            order.append(molecule)
+        buckets[molecule].append(atom)
+    return {
+        "organism": organism,
+        "molecules": [{"name": name, "atoms": buckets[name]} for name in order],
+    }
+
+
+def format_atomic_tree(tree: dict) -> str:
+    """Render ``atomic_tree`` as text: organism → molecule → atom."""
+    lines = [f"organism: {tree.get('organism') or '(unknown)'}"]
+    for molecule in tree.get("molecules") or []:
+        lines.append(f"  molecule: {molecule.get('name')}")
+        for atom in molecule.get("atoms") or []:
+            flags: list[str] = []
+            enabled = atom.get("enabled")
+            if enabled is True:
+                flags.append("enabled")
+            elif enabled is False:
+                flags.append("disabled")
+            if atom.get("consequential"):
+                flags.append("consequential")
+            suffix = f" [{', '.join(flags)}]" if flags else ""
+            lines.append(f"    atom: {atom.get('id') or atom.get('name')}{suffix}")
+    return "\n".join(lines) + "\n"
+
+
 class HostHTML(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -147,8 +203,13 @@ def doctor(
     html: Path | str | None = None,
     extra_profiles=(),
     origin_trial_configured=False,
+    tree: bool = False,
 ):
-    """Return configuration evidence only. Never include HTML or token contents."""
+    """Return configuration evidence only. Never include HTML or token contents.
+
+    When ``tree`` is True and the manifest validates, include an Atomic Design
+    grouping (atom → molecule → organism) under the ``tree`` key (issue #20).
+    """
     checked_path, refused = _as_local(path)
     if refused or checked_path is None:
         return _refused(refused or REMOTE_MESSAGE)
@@ -215,11 +276,16 @@ def doctor(
     )
     if not helper.is_file():
         code = max(code, 1)
-    return {
+    report = {
         "checks": rows,
         "exit_code": code,
         "note": "document.modelContext is browser-only; local configuration is not browser or deployment evidence.",
-    }, code
+    }
+    if tree and checked.ok:
+        data, fatal = load_manifest(checked_path)
+        if fatal is None:
+            report["tree"] = atomic_tree(data)
+    return report, code
 
 
 def canonical_manifest(path: Path, *, extra_profiles=()):

@@ -20,7 +20,7 @@ from ais_webmcp.validate import (
     validate_data,
 )
 
-_ANNOTATION_KEYS = ("readOnlyHint", "consequentialHint", "untrustedContentHint")
+_ANNOTATION_KEYS = ("readOnlyHint", "consequentialHint", "untrustedContentHint", "debugging")
 
 
 @dataclass(frozen=True, slots=True)

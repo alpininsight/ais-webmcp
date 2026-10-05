@@ -21,7 +21,9 @@ from jsonschema.exceptions import SchemaError
 LIFECYCLE_NOTE = "unregister is AbortController / { signal } on registerTool, not unregisterTool"
 
 SCHEMA_KEYS = ("inputSchema", "parameters", "input_schema")
-ALLOWED_ANNOTATIONS = frozenset({"readOnlyHint", "consequentialHint", "untrustedContentHint"})
+ALLOWED_ANNOTATIONS = frozenset(
+    {"readOnlyHint", "consequentialHint", "untrustedContentHint", "debugging"}
+)
 # Schema validators that restated our semantic messages. oneOf context is noisy
 # when the missing / ambiguous / non-object schema key is already reported.
 _SKIP_SCHEMA_VALIDATORS = frozenset({"oneOf"})

@@ -44,18 +44,21 @@ class WebpageProfile:
         return (
             ToolSpec(
                 id="list_sections",
+                group="navigation",
                 read_only=True,
                 name="List sections",
                 description="List available page section anchors on this host.",
             ),
             ToolSpec(
                 id="go_to_section",
+                group="navigation",
                 name="Go to section",
                 description="Scroll or navigate the page to a named section anchor.",
                 input_schema=section_param,
             ),
             ToolSpec(
                 id="get_section",
+                group="content",
                 read_only=True,
                 name="Get section",
                 description="Return the text content of a named section.",
@@ -63,23 +66,27 @@ class WebpageProfile:
             ),
             ToolSpec(
                 id="get_company_pitch",
+                group="content",
                 read_only=True,
                 name="Get company pitch",
                 description="Return a short company / product pitch summary.",
             ),
             ToolSpec(
                 id="get_contact",
+                group="legal_contact",
                 read_only=True,
                 name="Get contact",
                 description="Return public contact details for this host.",
             ),
             ToolSpec(
                 id="open_legal",
+                group="legal_contact",
                 name="Open legal",
                 description="Open imprint, privacy, or other legal pages.",
             ),
             ToolSpec(
                 id="subscribe_newsletter",
+                group="consequential",
                 name="Subscribe newsletter",
                 description="Subscribe an email address to the host newsletter.",
                 consequential=True,
@@ -97,6 +104,7 @@ class WebpageProfile:
             ),
             ToolSpec(
                 id="start_conversation",
+                group="legal_contact",
                 name="Start conversation",
                 description="Start an assisted conversation about this host's content.",
             ),
