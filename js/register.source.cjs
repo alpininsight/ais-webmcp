@@ -2,8 +2,8 @@
  * Insight UI WebMCP browser helper (MVP).
  *
  * Feature-detects `document.modelContext` (not navigator) and exposes a thin
- * registerTool / registerFromManifest / unregister / status API on
- * `window.InsightUiWebmcp`.
+ * registerTool / registerFromManifest / unregister / status /
+ * onToolActivated / onToolCancel API on `window.InsightUiWebmcp`.
  *
  * Spec notes (EPP / document.modelContext only):
  * - `registerTool(tool, { signal })` returns a Promise — always await it.
@@ -12,8 +12,10 @@
  *   cancel execution only via the execute AbortSignal (see issue #8).
  * - Tool payload uses `name` (id) + optional `title` (human label) and
  *   `annotations.*Hint` — never a top-level `consequential` boolean.
- * - Tool activation callbacks such as `ontoolactivated` live on
- *   `document.modelContext` (Chrome 156+ / PR245), not on navigator.
+ * - Tool lifecycle events `toolactivated` / `toolcancel` (handler properties
+ *   `ontoolactivated` / `ontoolcancel`) fire on `document.modelContext`
+ *   (Chrome 156+ / WebMCP PR #245). Helpers `onToolActivated` / `onToolCancel`
+ *   subscribe only there — never on `window` or `navigator.modelContext`.
  *
  * No-op when WebMCP is unavailable so hosts can ship the script unconditionally.
  */
@@ -104,6 +106,74 @@
       originTrialMeta: meta,
       reason: reason,
     };
+  }
+
+  /**
+   * Subscribe to a tool-lifecycle event on document.modelContext only (#7).
+   *
+   * Event types (Chrome 156+ / WebMCP PR #245):
+   * - "toolactivated" — agent started executing a registered tool
+   * - "toolcancel" — agent cancelled that execution
+   *
+   * Never attaches to window or navigator.modelContext. When modelContext is
+   * missing or is not an EventTarget, returns a no-op unsubscribe.
+   *
+   * @param {"toolactivated"|"toolcancel"} type
+   * @param {EventListener} listener
+   * @param {AddEventListenerOptions|boolean} [options]
+   * @returns {function(): void} unsubscribe (safe to call more than once)
+   */
+  function addToolLifecycleListener(type, listener, options) {
+    function noop() {}
+    if (type !== "toolactivated" && type !== "toolcancel") {
+      return noop;
+    }
+    if (typeof listener !== "function") {
+      return noop;
+    }
+    var ctx = getModelContext();
+    if (!ctx || typeof ctx.addEventListener !== "function") {
+      return noop;
+    }
+    try {
+      ctx.addEventListener(type, listener, options);
+    } catch (_err) {
+      return noop;
+    }
+    var removed = false;
+    return function unsubscribe() {
+      if (removed) {
+        return;
+      }
+      removed = true;
+      try {
+        if (typeof ctx.removeEventListener === "function") {
+          ctx.removeEventListener(type, listener, options);
+        }
+      } catch (_removeErr) {
+        /* ignore */
+      }
+    };
+  }
+
+  /**
+   * Listen for toolactivated on document.modelContext only (#7).
+   * @param {EventListener} listener
+   * @param {AddEventListenerOptions|boolean} [options]
+   * @returns {function(): void}
+   */
+  function onToolActivated(listener, options) {
+    return addToolLifecycleListener("toolactivated", listener, options);
+  }
+
+  /**
+   * Listen for toolcancel on document.modelContext only (#7).
+   * @param {EventListener} listener
+   * @param {AddEventListenerOptions|boolean} [options]
+   * @returns {function(): void}
+   */
+  function onToolCancel(listener, options) {
+    return addToolLifecycleListener("toolcancel", listener, options);
   }
 
   var warnedStringInput = false;
@@ -682,6 +752,8 @@
   var api = {
     isSupported: isSupported,
     status: status,
+    onToolActivated: onToolActivated,
+    onToolCancel: onToolCancel,
     registerTool: registerTool,
     registerFromManifest: registerFromManifest,
     registerDefaults: registerDefaults,
