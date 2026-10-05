@@ -589,6 +589,59 @@ describe("InsightUiWebmcp registerTool contract", () => {
     );
   });
 
+  it("rejects execute for Promise.reject() with no reason", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "reject_bare",
+      name: "Reject bare",
+      description: "Reject with no reason.",
+      execute: () => Promise.reject(),
+    });
+    const { tool } = ctx.registerCalls[0];
+    await assert.rejects(
+      () => tool.execute({}),
+      (err) => err === undefined,
+    );
+  });
+
+  it("rejects execute for Promise.reject(null)", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "reject_null",
+      name: "Reject null",
+      description: "Reject with null.",
+      execute: () => Promise.reject(null),
+    });
+    const { tool } = ctx.registerCalls[0];
+    await assert.rejects(
+      () => tool.execute({}),
+      (err) => err === null,
+    );
+  });
+
+  it("rejects execute when the handler throws undefined", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "throw_undefined",
+      name: "Throw undefined",
+      description: "Throw undefined synchronously.",
+      execute: () => {
+        throw undefined;
+      },
+    });
+    const { tool } = ctx.registerCalls[0];
+    await assert.rejects(
+      () => tool.execute({}),
+      (err) => err === undefined,
+    );
+  });
+
   it("rejects execute immediately when its signal is already aborted", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

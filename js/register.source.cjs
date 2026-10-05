@@ -114,7 +114,9 @@
       return new Promise(function (resolve, reject) {
         var settled = false;
 
-        function finish(err, value) {
+        // Do not use truthiness of err: Promise.reject() / reject(null) /
+        // throw undefined|null|false|0|'' must still reject.
+        function finish(result) {
           if (settled) {
             return;
           }
@@ -122,15 +124,15 @@
           if (signal && typeof signal.removeEventListener === "function") {
             signal.removeEventListener("abort", onAbort);
           }
-          if (err) {
-            reject(err);
+          if (result.ok) {
+            resolve(result.value);
           } else {
-            resolve(value);
+            reject(result.err);
           }
         }
 
         function onAbort() {
-          finish(abortError());
+          finish({ ok: false, err: abortError() });
         }
 
         if (signal && typeof signal.addEventListener === "function") {
@@ -141,24 +143,24 @@
         try {
           pending = handler(payload, { signal: signal });
         } catch (err) {
-          finish(err);
+          finish({ ok: false, err: err });
           return;
         }
 
         Promise.resolve(pending).then(
           function (value) {
             if (signal && signal.aborted) {
-              finish(abortError());
+              finish({ ok: false, err: abortError() });
               return;
             }
-            finish(null, value);
+            finish({ ok: true, value: value });
           },
           function (err) {
             if (signal && signal.aborted) {
-              finish(abortError());
+              finish({ ok: false, err: abortError() });
               return;
             }
-            finish(err);
+            finish({ ok: false, err: err });
           },
         );
       });
