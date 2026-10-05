@@ -9,6 +9,7 @@ import pytest
 from webmcp_manifest.manifest import ToolSpec, WebmcpManifest
 from webmcp_manifest.profiles import get_profile, list_profiles
 from webmcp_manifest.profiles.webpage import WEBPAGE_ANCHORS, WebpageProfile
+from webmcp_manifest.validate import validate_data
 
 
 @pytest.mark.unit
@@ -93,3 +94,40 @@ def test_tool_spec_to_dict_uses_input_schema() -> None:
 def test_unknown_profile_raises() -> None:
     with pytest.raises(KeyError, match="Unknown WebMCP profile"):
         get_profile("does-not-exist")
+
+
+@pytest.mark.unit
+def test_tool_spec_untrusted_content_hint_is_explicit() -> None:
+    plain = ToolSpec(id="get_section", name="Get section", description="Read", read_only=True)
+    assert "untrustedContentHint" not in plain.to_dict()["annotations"]
+
+    marked = ToolSpec(
+        id="search_reviews",
+        name="Search reviews",
+        description="Return third-party reviews",
+        read_only=True,
+        untrusted_content=True,
+    ).to_dict()
+    assert marked["annotations"] == {"readOnlyHint": True, "untrustedContentHint": True}
+    assert "untrusted_content" not in marked
+    manifest = {"profile": "webpage", "version": "1", "tools": [marked]}
+    assert validate_data(manifest).ok
+
+    consequential = ToolSpec(
+        id="import_feed",
+        name="Import feed",
+        description="Import an external feed",
+        consequential=True,
+        untrusted_content=True,
+    ).to_dict()
+    assert consequential["annotations"] == {
+        "readOnlyHint": False,
+        "consequentialHint": True,
+        "untrustedContentHint": True,
+    }
+
+
+@pytest.mark.unit
+def test_webpage_profile_ships_no_untrusted_content_hint() -> None:
+    for tool in WebpageProfile().build_manifest().to_dict()["tools"]:
+        assert "untrustedContentHint" not in tool["annotations"], tool["id"]
