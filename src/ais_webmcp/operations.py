@@ -126,6 +126,12 @@ def _header_token_lengths(text: str) -> list[int]:
     return lengths
 
 
+BROWSER_STATUS_HINT = (
+    "Check in the page with InsightUiWebmcp.status(): "
+    "ok, no-origin-trial-meta or no-model-context. The token value is never reported."
+)
+
+
 def _refused(message: str) -> tuple[dict, int]:
     report = {
         "checks": [{"check": "target", "status": "error", "detail": message}],
@@ -200,7 +206,11 @@ def doctor(
                 "detail": parsed.csp_note,
             },
             third_row,
-            {"check": "browser_support", "status": "unverified"},
+            {
+                "check": "browser_support",
+                "status": "unverified",
+                "detail": BROWSER_STATUS_HINT,
+            },
         ]
     )
     if not helper.is_file():

@@ -2,7 +2,8 @@
  * Insight UI WebMCP browser helper (MVP).
  *
  * Feature-detects `document.modelContext` (not navigator) and exposes a thin
- * registerTool / registerFromManifest / unregister API on `window.InsightUiWebmcp`.
+ * registerTool / registerFromManifest / unregister / status API on
+ * `window.InsightUiWebmcp`.
  *
  * Spec notes (EPP / document.modelContext only):
  * - `registerTool(tool, { signal })` returns a Promise — always await it.
@@ -39,6 +40,70 @@
   function isSupported() {
     var ctx = getModelContext();
     return !!(ctx && typeof ctx.registerTool === "function");
+  }
+
+  /**
+   * Whether the page carries a non-empty `<meta http-equiv="origin-trial">`.
+   * Only presence is reported; the token value is never read out (#6).
+   * A token delivered as an `Origin-Trial` response header is not visible here.
+   * @returns {boolean|null} null when the DOM cannot be queried
+   */
+  function hasOriginTrialMeta() {
+    try {
+      var doc = global.document;
+      if (!doc || typeof doc.querySelectorAll !== "function") {
+        return null;
+      }
+      var metas = doc.querySelectorAll("meta[http-equiv]");
+      for (var i = 0; i < metas.length; i++) {
+        var meta = metas[i];
+        if (!meta || typeof meta.getAttribute !== "function") {
+          continue;
+        }
+        var equiv = String(meta.getAttribute("http-equiv") || "")
+          .trim()
+          .toLowerCase();
+        if (
+          equiv === "origin-trial" &&
+          String(meta.getAttribute("content") || "").trim()
+        ) {
+          return true;
+        }
+      }
+      return false;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  /**
+   * Read-only browser diagnosis for hosts and developers (#6).
+   *
+   * Distinguishes the three page-side states the server cannot see:
+   * - "ok": `document.modelContext.registerTool` exists (trial or stable API).
+   * - "no-origin-trial-meta": API missing and no origin-trial meta on the page.
+   * - "no-model-context": API missing although a meta is present (or the DOM
+   *   could not be inspected): browser/version, expired or foreign-origin
+   *   token, flags, or Permissions-Policy are the next suspects.
+   * Never registers tools, never returns or logs the token value.
+   * @returns {{supported: boolean, modelContext: boolean, registerTool: boolean,
+   *   originTrialMeta: (boolean|null), reason: string}}
+   */
+  function status() {
+    var ctx = getModelContext();
+    var canRegister = !!(ctx && typeof ctx.registerTool === "function");
+    var meta = hasOriginTrialMeta();
+    var reason = "ok";
+    if (!canRegister) {
+      reason = meta === false ? "no-origin-trial-meta" : "no-model-context";
+    }
+    return {
+      supported: canRegister,
+      modelContext: !!ctx,
+      registerTool: canRegister,
+      originTrialMeta: meta,
+      reason: reason,
+    };
   }
 
   var warnedStringInput = false;
@@ -616,6 +681,7 @@
 
   var api = {
     isSupported: isSupported,
+    status: status,
     registerTool: registerTool,
     registerFromManifest: registerFromManifest,
     registerDefaults: registerDefaults,
