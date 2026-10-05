@@ -41,10 +41,45 @@
     return !!(ctx && typeof ctx.registerTool === "function");
   }
 
+  var warnedStringInput = false;
+
+  function abortError() {
+    var aborted = new Error("The operation was aborted.");
+    aborted.name = "AbortError";
+    return aborted;
+  }
+
   /**
-   * Normalize host execute handlers for the WebMCP callback shape.
-   * Thin prep for #8: prefer plain-object input; pass through `{ signal }`.
-   * Does not implement full abort-during-work semantics (issue #8).
+   * Developer warning only. Never include the input value.
+   * Strings are a defensive fallback, not the WebMCP input contract (#8).
+   */
+  function warnStringInput() {
+    if (warnedStringInput) {
+      return;
+    }
+    warnedStringInput = true;
+    try {
+      if (global.console && typeof global.console.warn === "function") {
+        global.console.warn(
+          "InsightUiWebmcp: string tool input was parsed defensively; pass a plain object",
+        );
+      }
+    } catch (_warnErr) {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Normalize host execute handlers for the WebMCP callback shape (#8).
+   *
+   * Primary input is a plain object. A JSON string is parsed only as a
+   * fallback and warned once. `signal` is forwarded as `{ signal }`.
+   * An already-aborted signal rejects before the handler runs. Abort during
+   * the handler promise rejects this execute promise with AbortError and
+   * drops a later success. Handlers must still observe `signal` before
+   * scroll, submit, or fetch; this wrapper cannot undo work they already did.
+   * Registration abort does not cancel in-flight execute.
+   *
    * @param {function} handler
    * @returns {function}
    */
@@ -68,14 +103,65 @@
       ) {
         return Promise.reject(new TypeError("tool input must be an object"));
       }
-
-      if (signal && signal.aborted) {
-        var aborted = new Error("The operation was aborted.");
-        aborted.name = "AbortError";
-        return Promise.reject(aborted);
+      if (typeof input === "string") {
+        warnStringInput();
       }
 
-      return Promise.resolve(handler(payload, { signal: signal }));
+      if (signal && signal.aborted) {
+        return Promise.reject(abortError());
+      }
+
+      return new Promise(function (resolve, reject) {
+        var settled = false;
+
+        function finish(err, value) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          if (signal && typeof signal.removeEventListener === "function") {
+            signal.removeEventListener("abort", onAbort);
+          }
+          if (err) {
+            reject(err);
+          } else {
+            resolve(value);
+          }
+        }
+
+        function onAbort() {
+          finish(abortError());
+        }
+
+        if (signal && typeof signal.addEventListener === "function") {
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+
+        var pending;
+        try {
+          pending = handler(payload, { signal: signal });
+        } catch (err) {
+          finish(err);
+          return;
+        }
+
+        Promise.resolve(pending).then(
+          function (value) {
+            if (signal && signal.aborted) {
+              finish(abortError());
+              return;
+            }
+            finish(null, value);
+          },
+          function (err) {
+            if (signal && signal.aborted) {
+              finish(abortError());
+              return;
+            }
+            finish(err);
+          },
+        );
+      });
     };
   }
 

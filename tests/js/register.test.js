@@ -522,6 +522,73 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal((await ctx.getTools()).length, 1);
   });
 
+  it("parses a JSON string defensively and warns once", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    let seen;
+    try {
+      await api.registerTool({
+        inputSchema: { type: "object" },
+        id: "go_to_section",
+        name: "Go to section",
+        description: "Scroll to section.",
+        execute: async (input) => {
+          seen = input;
+          return "done";
+        },
+      });
+      const { tool } = ctx.registerCalls[0];
+      const out = await tool.execute('{"section":"contact"}');
+      assert.equal(out, "done");
+      assert.deepEqual(seen, { section: "contact" });
+      await tool.execute('{"section":"about"}');
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /plain object/);
+      assert.equal(warnings[0].includes("contact"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("propagates a handler rejection and a synchronous throw", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: async () => {
+        throw new Error("handler failed");
+      },
+    });
+    const rejected = ctx.registerCalls[0].tool;
+    await assert.rejects(
+      () => rejected.execute({ section: "contact" }),
+      (err) => err && err.message === "handler failed",
+    );
+
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "list_sections",
+      name: "List sections",
+      description: "List sections.",
+      execute: () => {
+        throw new Error("sync handler");
+      },
+    });
+    const thrown = ctx.registerCalls[1].tool;
+    await assert.rejects(
+      () => thrown.execute({}),
+      (err) => err && err.message === "sync handler",
+    );
+  });
+
   it("rejects execute immediately when its signal is already aborted", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
@@ -540,6 +607,85 @@ describe("InsightUiWebmcp registerTool contract", () => {
       () => tool.execute({ section: "contact" }, { signal: ac.signal }),
       (err) => err && err.name === "AbortError",
     );
+  });
+
+  it("rejects in-flight execute on abort and ignores a later success", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    let resolveHandler;
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: () =>
+        new Promise((resolve) => {
+          resolveHandler = resolve;
+        }),
+    });
+    const { tool } = ctx.registerCalls[0];
+    const ac = new AbortController();
+    const pending = tool.execute(
+      { section: "contact" },
+      { signal: ac.signal },
+    );
+    ac.abort();
+    resolveHandler("scrolled");
+    await assert.rejects(
+      () => pending,
+      (err) => err && err.name === "AbortError",
+    );
+  });
+
+  it("reference go_to_section does not scroll after its execute signal aborts", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    let started;
+    const startedPromise = new Promise((resolve) => {
+      started = resolve;
+    });
+    let scrolled = false;
+    await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "go_to_section",
+      name: "Go to section",
+      description: "Scroll to section.",
+      execute: (input, { signal }) =>
+        new Promise((resolve, reject) => {
+          started();
+          const timer = setTimeout(() => {
+            if (signal && signal.aborted) {
+              reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+              return;
+            }
+            scrolled = true;
+            resolve({ section: input.section, navigated: true });
+          }, 30);
+          if (signal) {
+            signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+              },
+              { once: true },
+            );
+          }
+        }),
+    });
+    const { tool } = ctx.registerCalls[0];
+    const ac = new AbortController();
+    const pending = tool.execute(
+      { section: "contact" },
+      { signal: ac.signal },
+    );
+    await startedPromise;
+    ac.abort();
+    await assert.rejects(
+      () => pending,
+      (err) => err && err.name === "AbortError",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(scrolled, false);
   });
 
   it("unregister does not abort an in-flight execute signal", async () => {
