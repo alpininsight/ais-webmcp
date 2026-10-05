@@ -70,7 +70,10 @@ def test_second_django_and_static_profile(settings, tmp_path, capsys):
     assert main(["doctor", str(path), "--allow-profile", "docs_probe", "--format", "json"]) == 0
     report = StringIO()
     call_command("webmcp_doctor", str(path), "--format", "json", stdout=report)
-    assert json.loads(report.getvalue())["checks"][-1]["status"] == "unverified"
+    browser_row = json.loads(report.getvalue())["checks"][-1]
+    assert browser_row["check"] == "browser_support"
+    assert browser_row["status"] == "unverified"
+    assert "InsightUiWebmcp.status()" in browser_row["detail"]
     target = tmp_path / "docs.yaml"
     assert export_manifest(path, target, extra_profiles=("docs_probe",)).exit_code == 0
     assert diff_manifests(path, target, extra_profiles=("docs_probe",)) == ("", 0)
