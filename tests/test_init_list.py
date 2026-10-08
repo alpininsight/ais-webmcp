@@ -185,7 +185,7 @@ def test_list_fixture_and_invalid_exits() -> None:
     ok = _run("list", str(VALID_JSON), "--format", "json")
     assert ok.returncode == 0, ok.stderr + ok.stdout
     payload = json.loads(ok.stdout)
-    assert len(payload["tools"]) == 8
+    assert len(payload["tools"]) == 9
 
     bad = _run("list", str(INVALID))
     assert bad.returncode == 1

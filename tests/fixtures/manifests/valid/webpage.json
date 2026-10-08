@@ -108,6 +108,20 @@
       "group": "content"
     },
     {
+      "id": "list_products",
+      "name": "List products",
+      "description": "List the published product cards of this page with name, title, status (for example Private Beta) and a short description. Returns at most 12 entries; no side effects.",
+      "consequential": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "group": "content"
+    },
+    {
       "id": "get_contact",
       "name": "Get contact",
       "description": "Return public contact details for this host.",
