@@ -8,7 +8,7 @@ import pytest
 
 from webmcp_manifest.manifest import ToolSpec, WebmcpManifest
 from webmcp_manifest.profiles import get_profile, list_profiles
-from webmcp_manifest.profiles.webpage import WEBPAGE_ANCHORS, WebpageProfile
+from webmcp_manifest.profiles.webpage import MAX_PRODUCTS, WEBPAGE_ANCHORS, WebpageProfile
 from webmcp_manifest.validate import validate_data
 
 
@@ -47,6 +47,7 @@ def test_webpage_tool_ids() -> None:
         "go_to_section",
         "get_section",
         "get_company_pitch",
+        "list_products",
         "get_contact",
         "open_legal",
         "subscribe_newsletter",
@@ -65,6 +66,28 @@ def test_webpage_tool_ids() -> None:
 
 
 @pytest.mark.unit
+def test_webpage_list_products_is_read_only_and_bounded() -> None:
+    """list_products (#71): read-only, no input, bounded, no side-effect hints."""
+    tools = WebpageProfile().describe_tools()
+    spec = next(t for t in tools if t.id == "list_products")
+    assert spec.read_only is True
+    assert spec.consequential is False
+    assert spec.untrusted_content is False
+    assert spec.group == "content"
+    assert f"at most {MAX_PRODUCTS}" in spec.description
+    assert 0 < MAX_PRODUCTS <= 20
+    serialized = next(
+        tool
+        for tool in WebpageProfile().build_manifest().to_dict()["tools"]
+        if tool["id"] == "list_products"
+    )
+    assert serialized["annotations"] == {"readOnlyHint": True}
+    assert serialized["inputSchema"] == {"type": "object", "properties": {}}
+    assert "enabled" not in serialized
+    assert validate_data(WebpageProfile().build_manifest().to_dict()).ok
+
+
+@pytest.mark.unit
 def test_manifest_serializes() -> None:
     manifest = WebpageProfile().build_manifest(version="1")
     assert isinstance(manifest, WebmcpManifest)
@@ -72,7 +95,7 @@ def test_manifest_serializes() -> None:
     # Round-trip through JSON to ensure host file is valid.
     dumped = json.loads(json.dumps(payload))
     assert dumped["profile"] == "webpage"
-    assert len(dumped["tools"]) == 8
+    assert len(dumped["tools"]) == 9
     assert "list_sections" in {t["id"] for t in dumped["tools"]}
 
 

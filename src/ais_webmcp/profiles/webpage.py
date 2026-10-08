@@ -18,6 +18,9 @@ WEBPAGE_ANCHORS: tuple[str, ...] = (
     "contact",
 )
 
+# Upper bound for ``list_products`` results; hosts must cap their handler output.
+MAX_PRODUCTS = 12
+
 
 class WebpageProfile:
     """Profile for webpage-style Insight UI hosts (marketing / company sites)."""
@@ -29,7 +32,7 @@ class WebpageProfile:
         return WEBPAGE_ANCHORS
 
     def describe_tools(self) -> tuple[ToolSpec, ...]:
-        """Return tools for section navigation, pitch, contact, and conversation."""
+        """Return tools for section navigation, pitch, products, contact, and conversation."""
         section_param = {
             "type": "object",
             "properties": {
@@ -70,6 +73,17 @@ class WebpageProfile:
                 read_only=True,
                 name="Get company pitch",
                 description="Return a short company / product pitch summary.",
+            ),
+            ToolSpec(
+                id="list_products",
+                group="content",
+                read_only=True,
+                name="List products",
+                description=(
+                    "List the published product cards of this page with name, title, "
+                    "status (for example Private Beta) and a short description. "
+                    f"Returns at most {MAX_PRODUCTS} entries; no side effects."
+                ),
             ),
             ToolSpec(
                 id="get_contact",
