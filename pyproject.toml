@@ -9,8 +9,8 @@ description = "Create, validate and manage WebMCP manifests for any kind of webs
 readme = "README.md"
 requires-python = ">=3.12"
 # PEP 639: a short License-Expression on PyPI instead of the full text.
-license = "MPL-2.0"
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Alpin Insight Solutions GmbH & Co. KG" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -40,7 +40,7 @@ search_parent_directories = true
 packages = ["src/ais_webmcp", "src/webmcp_manifest"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/pyproject.toml", "/README.md", "/LICENSE"]
+include = ["/src", "/pyproject.toml", "/README.md", "/LICENSE", "/NOTICE"]
 
 [tool.hatch.build.hooks.custom]
 path = "src/ais_webmcp/build_hook.py"
