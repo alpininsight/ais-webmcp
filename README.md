@@ -31,6 +31,36 @@ static snippet with no token. Existing files are protected unless you pass
 `--force`. Consequential tools stay disabled in scaffolds until the host
 explicitly enables and implements them.
 
-This package and the `insight-ui-webmcp` Django extension live in the same
-[monorepo](https://github.com/alpininsight/insight-ui-webmcp) and share one schema
-and browser helper. Development preview; the first public release is pending.
+For Django and Insight UI applications, add the
+[insight-ui-webmcp adapter](https://github.com/alpininsight/insight-ui-webmcp).
+The core owns the shared schema and browser runtime; the adapter uses the
+installed core rather than shipping a second copy.
+
+Development preview; the first public PyPI/CDN release is pending.
+
+## Development
+
+```bash
+uv sync --locked --all-groups
+npm ci
+npm run check:js-build
+npm test
+uv run --locked pytest
+uv run --locked pre-commit run --all-files
+```
+
+Python 3.12–3.14 and Node 24 are checked in CI. Each release contains exactly
+one wheel and one sdist. The browser runtime and schema publish under
+`https://cdn.alpininsight.ai/ais-webmcp/vX.Y.Z/` after PyPI readback.
+This namespace is a publication contract, not a claim that assets are live.
+
+License: Apache-2.0 with NOTICE. Bundled dependencies retain their own licenses
+in the generated runtime banner.
+
+## Split provenance
+
+Core history was extracted from
+[insight-ui-webmcp at d6ead80843dbe42096791dd6688ed58a35dc3291](https://github.com/alpininsight/insight-ui-webmcp/tree/d6ead80843dbe42096791dd6688ed58a35dc3291).
+See [the implementation tracker](https://github.com/alpininsight/insight-ui-webmcp/issues/63)
+for the architecture decision, adapter/publisher/host migration and separate
+release evidence. The original repository history and existing host pins are preserved.

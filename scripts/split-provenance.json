@@ -1,0 +1,37 @@
+{
+  "source_repository": "alpininsight/insight-ui-webmcp",
+  "source_sha": "d6ead80843dbe42096791dd6688ed58a35dc3291",
+  "filtered_base": "ca25fc41ab078ebd76aece4c5faad7d5b1da5783",
+  "filter_tool": "git-filter-repo",
+  "filter_tool_revision": "a40bce548d2c",
+  "carried_license_fix": "112451709648b21c889283786cf600c1e45b55a4",
+  "carried_cdn_readback": "4fcbbab45c436e79fca5b619c642c9fad7449750",
+  "issue": "https://github.com/alpininsight/insight-ui-webmcp/issues/63",
+  "filter_paths": [
+    "packages/ais-webmcp/",
+    "js/",
+    "scripts/build-js.cjs",
+    "package.json",
+    "package-lock.json",
+    "tests/js/",
+    "tests/fixtures/",
+    "tests/test_validate.py",
+    "tests/test_profiles.py",
+    "tests/test_init_list.py",
+    "tests/test_contracts.py",
+    "tests/test_atomic_tree.py",
+    "tests/test_doctor_export_completeness.py",
+    "tests/check_validate_fixtures.py",
+    "src/insight_ui_webmcp/cli.py",
+    "src/insight_ui_webmcp/listing.py",
+    "src/insight_ui_webmcp/scaffold.py",
+    "src/insight_ui_webmcp/manifest.py",
+    "src/insight_ui_webmcp/validate.py",
+    "profiles/",
+    "schema/"
+  ],
+  "path_renames": {
+    "packages/ais-webmcp/": "",
+    "src/insight_ui_webmcp/": "src/ais_webmcp/"
+  }
+}

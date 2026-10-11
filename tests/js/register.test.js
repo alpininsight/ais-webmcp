@@ -11,7 +11,7 @@ const path = require("node:path");
 const REGISTER_JS = require("node:fs").realpathSync(
   path.resolve(
     __dirname,
-    "../../packages/insight-ui-webmcp/src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js",
+    "../../src/ais_webmcp/assets/register.js",
   ),
 );
 

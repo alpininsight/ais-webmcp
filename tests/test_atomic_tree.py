@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from django.core.management import call_command
 
 from ais_webmcp.operations import atomic_tree, doctor, format_atomic_tree
 
@@ -37,12 +36,3 @@ def test_doctor_tree_flag_includes_tree_key() -> None:
     report, code = doctor(str(WEBPAGE), tree=True)
     assert code in (0, 1)
     assert report["tree"]["organism"] == "webpage"
-
-
-@pytest.mark.integration
-def test_webmcp_doctor_tree_prints_molecules(capsys) -> None:
-    call_command("webmcp_doctor", str(WEBPAGE), "--tree")
-    out = capsys.readouterr().out
-    assert "organism: webpage" in out
-    assert "molecule: navigation" in out
-    assert "atom: subscribe_newsletter" in out
