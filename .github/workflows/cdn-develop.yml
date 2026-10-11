@@ -1,0 +1,48 @@
+name: WebMCP CDN develop preview
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: webmcp-cdn-develop
+  cancel-in-progress: false
+jobs:
+  quality:
+    if: github.ref == 'refs/heads/develop' && vars.WEBMCP_CDN_PUBLISH_ENABLED == 'true'
+    # ci.yml nests repository-policy (pull-requests: read); a caller that grants
+    # less fails at startup even though that job is skipped off pull_request.
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/ci.yml
+  version:
+    needs: quality
+    uses: alpininsight/.github-private/.github/workflows/gitversion-reusable.yml@main
+    with:
+      checkout_ref: ${{ github.sha }}
+  cdn:
+    needs: [quality, version]
+    uses: alpininsight/.github-private/.github/workflows/static-assets-reusable.yml@main
+    with:
+      checkout_ref: ${{ github.sha }}
+      node_version: '24'
+      setup_python: true
+      python_version: '3.14'
+      setup_uv: true
+      install_command: uv sync --locked --all-groups
+      mode: build
+      build_command: uv run --locked python scripts/build_delivery.py --version "${{ needs.version.outputs.major_minor_patch }}" --output output/delivery
+      upload_cdn: true
+      asset_directory: output/delivery/cdn
+      cdn_prefix: ais-webmcp
+      cdn_version: ${{ needs.version.outputs.major_minor_patch }}
+      cdn_asset_globs: '*.js,*.json'
+      cdn_upload_immutable: false
+      cdn_aliases: develop
+      cdn_mutable_cache_control: public, max-age=300
+      cdn_mutable_cache_max_age: '300'
+      update_latest: false
+    secrets:
+      r2_access_key_id: ${{ secrets.CDN_R2_ACCESS_KEY_ID }}
+      r2_secret_access_key: ${{ secrets.CDN_R2_SECRET_ACCESS_KEY }}
+      r2_endpoint: ${{ secrets.CDN_R2_ENDPOINT }}

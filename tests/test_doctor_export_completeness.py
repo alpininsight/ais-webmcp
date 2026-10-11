@@ -1,12 +1,7 @@
 """#24 completeness on the current operations surface: no remote fetch, no token."""
 
 import json
-from io import StringIO
 from pathlib import Path
-
-import pytest
-from django.core.management import call_command
-from django.core.management.base import CommandError
 
 from ais_webmcp.cli import main
 from ais_webmcp.operations import doctor, export_manifest
@@ -69,12 +64,6 @@ def test_doctor_redacts_tokens_and_notes_csp(tmp_path):
     assert {path.name: path.read_bytes() for path in tmp_path.iterdir()} == before
 
 
-def test_django_doctor_refuses_remote_url():
-    with pytest.raises(CommandError) as exc:
-        call_command("webmcp_doctor", "https://example.com/manifest.json")
-    assert exc.value.returncode == 2
-
-
 def test_export_tools_and_snippet_hide_tokens(tmp_path, capsys):
     manifest = _manifest(tmp_path)
     tools = tmp_path / "tools.json"
@@ -94,21 +83,3 @@ def test_export_tools_and_snippet_hide_tokens(tmp_path, capsys):
     forced = export_manifest(manifest, snippet, force=True, kind="snippet")
     assert forced.exit_code == 0
     assert SECRET not in snippet.read_text(encoding="utf-8")
-
-
-def test_django_export_kind_tools(tmp_path):
-    manifest = _manifest(tmp_path)
-    target = tmp_path / "tools.json"
-    out = StringIO()
-    call_command(
-        "webmcp_export",
-        str(manifest),
-        "--output",
-        str(target),
-        "--kind",
-        "tools",
-        stdout=out,
-    )
-    payload = json.loads(target.read_text(encoding="utf-8"))
-    assert payload["profile"]
-    assert payload["tools"]

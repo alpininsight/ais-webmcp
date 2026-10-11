@@ -1,0 +1,87 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  repository-policy:
+    # Central policy replaces the previous inline branch script.
+    # Skipped off pull_request so release/CDN workflow_call stays green.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: alpininsight/.github-private/.github/workflows/repository-policy-reusable.yml@main
+  quality:
+    uses: alpininsight/.github-private/.github/workflows/python-django-quality-reusable.yml@main
+    with:
+      runner_profile: general
+      python_versions: '["3.12", "3.13", "3.14"]'
+      uv_sync_args: --locked --all-groups
+      quality_node_version: '24'
+      skip_heavy_on_changelog_only: false
+      pre_commit_command: SKIP=no-commit-to-branch uv run --locked pre-commit run --all-files
+      lint_command: uv run --locked ruff check src tests scripts
+      format_command: uv run --locked ruff format --check src tests scripts
+      test_command: uv lock --check && uv run --locked pytest
+  compatibility:
+    name: Minimum supported dependencies
+    runs-on: general
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: '3.12'
+          enable-cache: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: uv sync --locked --all-groups
+      - name: Intentional matrix override without resync
+        run: |
+          uv pip install jsonschema==4.23.0 pyyaml==6.0.2
+          uv pip check
+          uv run --no-sync pytest --ignore=tests/test_distribution.py
+  assets:
+    uses: alpininsight/.github-private/.github/workflows/static-assets-reusable.yml@main
+    with:
+      node_version: '24'
+      install_command: npm ci
+      mode: check
+      check_command: npm run check:js-build && npm test
+      upload_cdn: false
+  gate:
+    name: WebMCP Quality Gate
+    needs: [repository-policy, quality, compatibility, assets]
+    if: always() && !cancelled()
+    runs-on: general
+    timeout-minutes: 5
+    steps:
+      - name: Require every contract
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          failed = {
+              name: job["result"]
+              for name, job in results.items()
+              if job["result"] != "success"
+              and not (name == "repository-policy" and job["result"] == "skipped")
+          }
+          if failed:
+              raise SystemExit(f"quality gate failed: {failed}")
+          PY
