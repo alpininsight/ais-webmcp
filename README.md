@@ -64,3 +64,17 @@ Core history was extracted from
 See [the implementation tracker](https://github.com/alpininsight/insight-ui-webmcp/issues/63)
 for the architecture decision, adapter/publisher/host migration and separate
 release evidence. The original repository history and existing host pins are preserved.
+
+### CDN verification after alias updates
+
+The release readback checks all nine canonical objects (runtime, schema and
+inventory under the immutable version, main and latest). Mutable aliases get a
+shared 360-second convergence budget for the uploader's 300-second cache TTL.
+Immutable mismatches and HTTP challenges fail immediately. CORS must contain
+exactly one allowed origin value; duplicate response headers fail the gate.
+
+Post-merge audit of Core #1 and adapter #60 (2026-10-11): green source checks
+missed mutable-cache convergence and duplicate CORS headers. The owning Core
+now tests both with a simulated clock and real multi-value HTTP headers. Before
+future CDN changes, exercise stale mutable aliases as well as immutable defects;
+keep package/license ownership in the Core when resolving split conflicts.

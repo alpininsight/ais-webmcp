@@ -132,6 +132,8 @@ def verify_cdn(bundle, version):
     paths.add("cdn/inventory.json")
     origin = "https://insight-ui.com"
     report = []
+    # One shared budget, including a 60-second margin beyond the mutable TTL.
+    mutable_deadline = time.monotonic() + 360
     for alias in (f"v{version}", "main", "latest"):
         immutable = alias.startswith("v")
         for relative in sorted(paths):
@@ -140,50 +142,63 @@ def verify_cdn(bundle, version):
                 raise ValueError("CDN artifact symlink rejected")
             expected = path.read_bytes()
             url = f"{CDN_ROOT}/{alias}/{path.name}"
-            request = urllib.request.Request(url, headers={"Origin": origin})
-            with urllib.request.urlopen(request, timeout=20) as response:
-                if response.status != 200 or response.geturl() != url:
-                    raise ValueError(f"canonical CDN GET failed: {url}")
-                data = response.read(len(expected) + 1)
-                content_type = response.headers.get_content_type()
-                allowed_types = (
-                    {"application/javascript", "text/javascript"}
-                    if path.suffix == ".js"
-                    else {"application/json"}
-                )
-                cache = response.headers.get("Cache-Control", "")
-                directives = [part.strip().lower() for part in cache.split(",")]
-                max_age = "max-age=31536000" if immutable else "max-age=300"
-                if (
-                    "public" not in directives
-                    or directives.count(max_age) != 1
-                    or sum(part.startswith("max-age=") for part in directives) != 1
-                    or any(
-                        part.split("=", 1)[0] in {"private", "no-cache", "no-store"}
-                        for part in directives
-                    )
-                    or ("immutable" in directives) != immutable
-                ):
-                    raise ValueError(f"CDN cache policy mismatch: {url}")
-                if content_type not in allowed_types:
-                    raise ValueError(f"CDN Content-Type mismatch: {url}")
-                cors = response.headers.get("Access-Control-Allow-Origin", "")
-                if cors not in {"*", origin}:
-                    raise ValueError(f"CDN CORS mismatch: {url}")
-            digest = hashlib.sha256(data).hexdigest()
-            if len(data) != len(expected) or digest != hashlib.sha256(expected).hexdigest():
-                raise ValueError(f"CDN public bytes mismatch: {url}")
-            report.append(
-                {
-                    "url": url,
-                    "size": len(data),
-                    "sha256": digest,
-                    "content_type": content_type,
-                    "cache_control": cache,
-                    "cors": cors,
-                }
-            )
+            while True:
+                try:
+                    report.append(_verify_cdn_object(url, path, expected, immutable, origin))
+                    break
+                except ValueError:
+                    # Mutable aliases can still serve the previous release for the
+                    # uploader's entire 300-second TTL. Retry canonical URLs only;
+                    # immutable defects and HTTP challenges fail immediately.
+                    remaining = mutable_deadline - time.monotonic()
+                    if immutable or remaining <= 0:
+                        raise
+                    time.sleep(min(20, remaining))
     return report
+
+
+def _verify_cdn_object(url, path, expected, immutable, origin):
+    request = urllib.request.Request(url, headers={"Origin": origin})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if response.status != 200 or response.geturl() != url:
+            raise ValueError(f"canonical CDN GET failed: {url}")
+        data = response.read(len(expected) + 1)
+        content_type = response.headers.get_content_type()
+        allowed_types = (
+            {"application/javascript", "text/javascript"}
+            if path.suffix == ".js"
+            else {"application/json"}
+        )
+        cache = response.headers.get("Cache-Control", "")
+        directives = [part.strip().lower() for part in cache.split(",")]
+        max_age = "max-age=31536000" if immutable else "max-age=300"
+        if (
+            "public" not in directives
+            or directives.count(max_age) != 1
+            or sum(part.startswith("max-age=") for part in directives) != 1
+            or any(
+                part.split("=", 1)[0] in {"private", "no-cache", "no-store"} for part in directives
+            )
+            or ("immutable" in directives) != immutable
+        ):
+            raise ValueError(f"CDN cache policy mismatch: {url}")
+        if content_type not in allowed_types:
+            raise ValueError(f"CDN Content-Type mismatch: {url}")
+        cors_values = response.headers.get_all("Access-Control-Allow-Origin", [])
+        if len(cors_values) != 1 or cors_values[0] not in {"*", origin}:
+            raise ValueError(f"CDN CORS mismatch: {url}")
+    digest = hashlib.sha256(data).hexdigest()
+    if len(data) != len(expected) or digest != hashlib.sha256(expected).hexdigest():
+        raise ValueError(f"CDN public bytes mismatch: {url}")
+    cors = cors_values[0]
+    return {
+        "url": url,
+        "size": len(data),
+        "sha256": digest,
+        "content_type": content_type,
+        "cache_control": cache,
+        "cors": cors,
+    }
 
 
 def project_files(bundle, name):

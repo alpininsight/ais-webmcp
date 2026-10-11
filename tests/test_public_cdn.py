@@ -121,3 +121,78 @@ def test_invalid_pin_is_rejected_before_network(bundle, monkeypatch, version):
     monkeypatch.setattr(publication.urllib.request, "urlopen", forbidden)
     with pytest.raises(ValueError, match="release version"):
         publication.verify_cdn(bundle, version)
+
+
+@pytest.mark.parametrize(
+    "values", [["*", "*"], ["*", "https://insight-ui.com"], ["*, https://insight-ui.com"]]
+)
+def test_multiple_cors_values_are_rejected(bundle, monkeypatch, values):
+    def urlopen(request, timeout):
+        response = Response(request, bundle)
+        del response.headers["Access-Control-Allow-Origin"]
+        for value in values:
+            response.headers["Access-Control-Allow-Origin"] = value
+        return response
+
+    monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
+    with pytest.raises(ValueError, match="CORS"):
+        publication.verify_cdn(bundle, "0.1.0")
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    elapsed = [0]
+    sleeps = []
+
+    def sleep(seconds):
+        elapsed[0] += seconds
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(publication.time, "monotonic", lambda: elapsed[0])
+    monkeypatch.setattr(publication.time, "sleep", sleep)
+    return elapsed, sleeps
+
+
+def test_mutable_aliases_converge_after_entire_ttl(bundle, monkeypatch, clock):
+    elapsed, sleeps = clock
+    requests = []
+
+    def urlopen(request, timeout):
+        requests.append(request)
+        stale = "/v0.1.0/" not in request.full_url and elapsed[0] < 320
+        return Response(request, bundle, "bytes" if stale else None)
+
+    monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
+    report = publication.verify_cdn(bundle, "0.1.0")
+    assert len(report) == 9
+    assert sum(sleeps) == 320  # A one-minute retry budget would fail this release.
+    assert all(
+        "?" not in request.full_url and not request.has_header("Cache-Control")
+        for request in requests
+    )
+
+
+def test_mutable_mismatch_has_one_bounded_deadline(bundle, monkeypatch, clock):
+    elapsed, sleeps = clock
+    monkeypatch.setattr(
+        publication.urllib.request,
+        "urlopen",
+        lambda request, timeout: Response(
+            request, bundle, "bytes" if "/main/" in request.full_url else None
+        ),
+    )
+    with pytest.raises(ValueError, match="bytes"):
+        publication.verify_cdn(bundle, "0.1.0")
+    assert elapsed[0] == sum(sleeps) == 360
+
+
+def test_mutable_challenge_fails_without_retry_or_bypass(bundle, monkeypatch, clock):
+    def urlopen(request, timeout):
+        if "/main/" in request.full_url:
+            raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)
+        return Response(request, bundle)
+
+    monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        publication.verify_cdn(bundle, "0.1.0")
+    assert clock[1] == []
