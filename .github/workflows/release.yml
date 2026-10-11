@@ -167,9 +167,9 @@ jobs:
       cdn_mutable_cache_max_age: '300'
       update_latest: true
     secrets:
-      r2_access_key_id: ${{ secrets.CDN_R2_ACCESS_KEY_ID }}
-      r2_secret_access_key: ${{ secrets.CDN_R2_SECRET_ACCESS_KEY }}
-      r2_endpoint: ${{ secrets.CDN_R2_ENDPOINT }}
+      r2_access_key_id: ${{ secrets.R2_ACCESS_KEY_ID }}
+      r2_secret_access_key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      r2_endpoint: ${{ secrets.R2_ENDPOINT }}
   cdn-verified:
     if: inputs.cdn
     needs: [cdn, build, version]
