@@ -1,5 +1,5 @@
 {
-  "name": "insight-ui-webmcp-assets",
+  "name": "ais-webmcp-assets",
   "private": true,
   "engines": {
     "node": ">=24 <25"

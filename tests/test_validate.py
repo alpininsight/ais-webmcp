@@ -51,8 +51,7 @@ def _run_module(*args: str) -> subprocess.CompletedProcess[str]:
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     return subprocess.run(
@@ -214,8 +213,7 @@ def test_validate_module_entry_accepts_a_file() -> None:
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     proc = subprocess.run(
@@ -236,8 +234,7 @@ def test_validate_import_does_not_load_django() -> None:
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     code = (
@@ -263,8 +260,7 @@ def test_fixture_gate_script() -> None:
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     proc = subprocess.run(

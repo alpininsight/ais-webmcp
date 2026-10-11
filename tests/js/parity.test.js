@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const helper = fs.realpathSync(
   path.resolve(
     __dirname,
-    "../../packages/insight-ui-webmcp/src/insight_ui_webmcp/static/insight_ui_webmcp/js/register.js",
+    "../../src/ais_webmcp/assets/register.js",
   ),
 );
 for (const entry of require("../fixtures/cross-layer.json")) {

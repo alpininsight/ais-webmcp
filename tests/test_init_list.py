@@ -24,8 +24,7 @@ def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     return subprocess.run(
@@ -202,8 +201,7 @@ def test_init_and_list_import_do_not_load_django() -> None:
     env.pop("DJANGO_SETTINGS_MODULE", None)
     env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(REPO_ROOT / "packages" / "ais-webmcp" / "src"),
-            str(REPO_ROOT / "packages" / "insight-ui-webmcp" / "src"),
+            str(REPO_ROOT / "src"),
         ]
     )
     code = (

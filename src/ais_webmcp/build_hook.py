@@ -13,14 +13,7 @@ class CustomBuildHook(BuildHookInterface):
             return
         version = self.metadata.version
         root = Path(self.root)
-        name = self.metadata.core.name
         client = root / "src/ais_webmcp"
-        if name == "insight-ui-webmcp":
-            client = root / "shared"
-            if not client.is_dir():
-                client = root.parent / "ais-webmcp/src/ais_webmcp"
-        # Django sdist includes the canonical client resources, so rebuilding
-        # its wheel remains independent of the sibling checkout.
         source = client / "assets/register.js"
         self.temporary = tempfile.TemporaryDirectory(prefix="ais-webmcp-wheel-")
         target = Path(self.temporary.name) / "register.js"
@@ -31,11 +24,7 @@ class CustomBuildHook(BuildHookInterface):
         target.write_text(
             re.sub(pattern, lambda match: match[1] + f'"{version}"', text), encoding="utf-8"
         )
-        relative = (
-            "ais_webmcp/assets/register.js"
-            if name == "ais-webmcp"
-            else "insight_ui_webmcp/static/insight_ui_webmcp/js/register.js"
-        )
+        relative = "ais_webmcp/assets/register.js"
         build_data.setdefault("force_include", {})[str(target)] = relative
 
     def finalize(self, version, build_data, artifact_path):
