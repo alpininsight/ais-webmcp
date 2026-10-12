@@ -78,3 +78,23 @@ missed mutable-cache convergence and duplicate CORS headers. The owning Core
 now tests both with a simulated clock and real multi-value HTTP headers. Before
 future CDN changes, exercise stale mutable aliases as well as immutable defects;
 keep package/license ownership in the Core when resolving split conflicts.
+
+## CDN credential setup and promotion audit
+
+The Core release caller follows the existing Insight UI/User/Brand organisation
+contract: `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_ENDPOINT` map to the
+central reusable uploader's `r2_access_key_id`, `r2_secret_access_key` and
+`r2_endpoint` inputs. These existing organisation secrets must select
+`alpininsight/ais-webmcp`; creating parallel `CDN_R2_*` credentials is unnecessary.
+Never put values in source, issue comments or evidence.
+
+The target bucket is `alpininsight-cdn`, with the owned prefix `ais-webmcp/`.
+Secret availability alone neither verifies a working credential nor enables an
+upload. The explicit release/CDN flags, exact reviewed Main source, matching
+Core PyPI files, immutable clobber guard and nine canonical public GET checks
+remain required. A control-plane CORS/domain check is separate from actual
+object headers and bytes.
+
+Post-merge lesson (2026-10-12): a green build-only release skips upload and cannot
+prove its secret names exist. Compare caller secret names and selected-repository
+metadata with the organisation contract before marking CDN prerequisites ready.
