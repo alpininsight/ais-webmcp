@@ -90,7 +90,7 @@ Never put values in source, issue comments or evidence.
 
 The target bucket is `alpininsight-cdn`, with the owned prefix `ais-webmcp/`.
 Secret availability alone neither verifies a working credential nor enables an
-upload. The explicit release/CDN flags, exact reviewed Main source, matching
+upload. The explicit release/CDN flags, exact protected Main source (release approval: environment `pypi-ais-webmcp` in .github-private), matching
 Core PyPI files, immutable clobber guard and nine canonical public GET checks
 remain required. A control-plane CORS/domain check is separate from actual
 object headers and bytes.
