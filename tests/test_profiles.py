@@ -111,6 +111,30 @@ def test_tool_spec_to_dict_uses_input_schema() -> None:
     assert data["id"] == "go_to_section"
     assert data["inputSchema"] == {"type": "object"}
     assert "parameters" not in data
+    assert "outputSchema" not in data
+
+    declared = ToolSpec(
+        id="list_sections",
+        name="List sections",
+        description="List anchors",
+        read_only=True,
+        output_schema={
+            "type": "object",
+            "properties": {"sections": {"type": "array", "items": {"type": "string"}}},
+        },
+    ).to_dict()
+    assert declared["outputSchema"]["properties"]["sections"]["type"] == "array"
+    declared_result = validate_data({"profile": "webpage", "version": "1", "tools": [declared]})
+    assert declared_result.ok, declared_result.issues
+    assert declared_result.findings == ()
+
+    unconstrained = ToolSpec(
+        id="list_sections",
+        name="List sections",
+        description="List anchors",
+        output_schema={},
+    ).to_dict()
+    assert unconstrained["outputSchema"] == {}
 
 
 @pytest.mark.unit

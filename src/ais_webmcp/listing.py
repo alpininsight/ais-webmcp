@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ais_webmcp.validate import (
+    ValidationFinding,
     ValidationResult,
     exit_code,
     load_manifest,
@@ -51,6 +52,7 @@ class ManifestListing:
     profile: str
     version: str
     tools: tuple[ListedTool, ...]
+    findings: tuple[ValidationFinding, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -110,6 +112,7 @@ def list_path(
         profile=profile if isinstance(profile, str) else "",
         version=version if isinstance(version, str) else "",
         tools=rows,
+        findings=checked.findings,
     )
 
 
@@ -190,4 +193,9 @@ def list_manifests(
 
 def _ok_placeholder(listing: ManifestListing) -> ValidationResult:
     """Validation-shaped success used only when a batch mixes ok and failed files."""
-    return ValidationResult(ok=True, source=listing.source, issues=())
+    return ValidationResult(
+        ok=True,
+        source=listing.source,
+        issues=(),
+        findings=listing.findings,
+    )

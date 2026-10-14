@@ -21,6 +21,14 @@ from jsonschema.exceptions import SchemaError
 LIFECYCLE_NOTE = "unregister is AbortController / { signal } on registerTool, not unregisterTool"
 
 SCHEMA_KEYS = ("inputSchema", "parameters", "input_schema")
+OUTPUT_SCHEMA_KEYS = ("outputSchema", "output_schema")
+# Stable signal for check engines. Missing output schemas stay valid.
+MISSING_OUTPUT_SCHEMA_CODE = "missing_output_schema"
+MISSING_OUTPUT_SCHEMA_SEVERITY = "low"
+MISSING_OUTPUT_SCHEMA_MESSAGE = (
+    "missing outputSchema (also accepts output_schema). "
+    "Optional for existing hosts; absence is a low-severity finding."
+)
 ALLOWED_ANNOTATIONS = frozenset(
     {"readOnlyHint", "consequentialHint", "untrustedContentHint", "debugging"}
 )
@@ -54,13 +62,33 @@ class ValidationIssue:
 
 
 @dataclass(frozen=True, slots=True)
+class ValidationFinding:
+    """Non-blocking observation. Does not fail ``ok`` or the process exit code.
+
+    ``code`` is the stable identifier for callers. ``missing_output_schema`` at
+    severity ``low`` means the tool declared no output schema.
+    """
+
+    path: str
+    code: str
+    severity: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Outcome for a single manifest document or file."""
+    """Outcome for a single manifest document or file.
+
+    ``ok`` is false only for schema or semantic errors. ``findings`` are
+    advisory: a tool with no output schema keeps the manifest valid and adds
+    one ``missing_output_schema`` finding at severity ``low``.
+    """
 
     ok: bool
     source: str
     issues: tuple[ValidationIssue, ...]
     notes: tuple[str, ...] = (LIFECYCLE_NOTE,)
+    findings: tuple[ValidationFinding, ...] = ()
     fatal: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,6 +98,15 @@ class ValidationResult:
             "path": self.source,
             "fatal": self.fatal,
             "issues": [{"path": issue.path, "message": issue.message} for issue in self.issues],
+            "findings": [
+                {
+                    "path": finding.path,
+                    "code": finding.code,
+                    "severity": finding.severity,
+                    "message": finding.message,
+                }
+                for finding in self.findings
+            ],
             "notes": list(self.notes),
         }
 
@@ -132,6 +169,50 @@ def _issue(path: str, message: str) -> ValidationIssue:
     return ValidationIssue(path=path, message=message)
 
 
+def _missing_output_schema(path: str) -> ValidationFinding:
+    return ValidationFinding(
+        path=path,
+        code=MISSING_OUTPUT_SCHEMA_CODE,
+        severity=MISSING_OUTPUT_SCHEMA_SEVERITY,
+        message=MISSING_OUTPUT_SCHEMA_MESSAGE,
+    )
+
+
+def _output_schema_checks(
+    tool: dict[str, Any], prefix: str
+) -> tuple[list[ValidationIssue], list[ValidationFinding]]:
+    """Check an optional tool output schema.
+
+    A present schema must be a JSON object and a valid Draft 2020-12 schema.
+    A missing schema does not fail the tool; it returns one low finding.
+    """
+    present = [key for key in OUTPUT_SCHEMA_KEYS if key in tool]
+    if not present:
+        return [], [_missing_output_schema(prefix)]
+    if len(present) > 1:
+        joined = ", ".join(present)
+        return [
+            _issue(
+                prefix,
+                "ambiguous output schema keys "
+                f"({joined}); keep only one of outputSchema, output_schema",
+            )
+        ], []
+    key = present[0]
+    if not isinstance(tool[key], dict):
+        return [_issue(f"{prefix}.{key}", f"{key} must be a JSON object")], []
+    try:
+        Draft202012Validator.check_schema(tool[key])
+    except SchemaError as exc:
+        return [
+            _issue(
+                f"{prefix}.{key}",
+                f"invalid Draft 2020-12 output schema: {exc.message}",
+            )
+        ], []
+    return [], []
+
+
 def _tool_token(tool: dict[str, Any], index: int) -> str:
     ident = tool.get("id")
     if isinstance(ident, str) and ident:
@@ -142,10 +223,13 @@ def _tool_token(tool: dict[str, Any], index: int) -> str:
     return f"#{index}"
 
 
-def _semantic_issues(data: Any, allowed_profiles: tuple[str, ...]) -> list[ValidationIssue]:
+def _semantic_issues(
+    data: Any, allowed_profiles: tuple[str, ...]
+) -> tuple[list[ValidationIssue], list[ValidationFinding]]:
     issues: list[ValidationIssue] = []
+    findings: list[ValidationFinding] = []
     if not isinstance(data, dict):
-        return [_issue("$", "manifest must be a JSON object")]
+        return [_issue("$", "manifest must be a JSON object")], findings
 
     profile = data.get("profile")
     if not isinstance(profile, str) or not profile.strip():
@@ -161,7 +245,7 @@ def _semantic_issues(data: Any, allowed_profiles: tuple[str, ...]) -> list[Valid
     tools = data.get("tools")
     if not isinstance(tools, list):
         issues.append(_issue("tools", "tools must be an array"))
-        return issues
+        return issues, findings
 
     name_re = _tool_name_pattern()
     seen: dict[str, int] = {}
@@ -208,6 +292,10 @@ def _semantic_issues(data: Any, allowed_profiles: tuple[str, ...]) -> list[Valid
                             f"{prefix}.{key}", f"invalid Draft 2020-12 input schema: {exc.message}"
                         )
                     )
+
+        output_issues, output_findings = _output_schema_checks(tool, prefix)
+        issues.extend(output_issues)
+        findings.extend(output_findings)
 
         ident = tool.get("id")
         if "id" in tool:
@@ -274,7 +362,7 @@ def _semantic_issues(data: Any, allowed_profiles: tuple[str, ...]) -> list[Valid
                 )
             )
 
-    return issues
+    return issues, findings
 
 
 def _schema_for(allowed_profiles: tuple[str, ...]) -> dict[str, Any]:
@@ -358,10 +446,16 @@ def validate_data(
 ) -> ValidationResult:
     """Validate a parsed manifest. Does not read the filesystem or import Django."""
     allowed = _allowed(extra_profiles)
-    semantic = _semantic_issues(data, allowed)
+    semantic, findings = _semantic_issues(data, allowed)
     schema_issues = _schema_issues(data, _schema_for(allowed), {issue.path for issue in semantic})
     issues = _dedupe([*semantic, *schema_issues])
-    return ValidationResult(ok=not issues, source=source, issues=tuple(issues), fatal=False)
+    return ValidationResult(
+        ok=not issues,
+        source=source,
+        issues=tuple(issues),
+        findings=tuple(findings),
+        fatal=False,
+    )
 
 
 def _dedupe(issues: list[ValidationIssue]) -> list[ValidationIssue]:
@@ -468,6 +562,10 @@ def render_text(results: list[ValidationResult]) -> str:
         lines = [header]
         for issue in result.issues:
             lines.append(f"- {issue.path}: {issue.message}")
+        for finding in result.findings:
+            lines.append(
+                f"finding: {finding.path}: [{finding.severity}] {finding.code}: {finding.message}"
+            )
         for note in result.notes:
             lines.append(f"note: {note}")
         blocks.append("\n".join(lines))

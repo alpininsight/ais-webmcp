@@ -32,6 +32,8 @@ _YAML_HEADER = """\
 # Starter WebMCP manifest from `ais-webmcp init`.
 # Check it with `ais-webmcp validate`. List tools with `ais-webmcp list`.
 # subscribe_newsletter is consequential and enabled: false. Do not opt in here.
+# Declare outputSchema (or output_schema) on each tool. Omission stays valid
+# and is a low-severity missing_output_schema finding.
 # No Origin Trial token is included. Unregister is AbortController / { signal }
 # on registerTool, not unregisterTool.
 """

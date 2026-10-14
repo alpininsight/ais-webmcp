@@ -1,0 +1,23 @@
+{
+  "profile": "webpage",
+  "version": "1",
+  "tools": [
+    {
+      "id": "list_sections",
+      "name": "List sections",
+      "description": "List available page section anchors on this host.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": "not-an-array"
+      },
+      "consequential": false,
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}

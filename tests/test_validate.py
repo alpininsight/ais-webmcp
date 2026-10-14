@@ -16,6 +16,9 @@ from webmcp_manifest.profiles import list_profiles
 from webmcp_manifest.profiles.webpage import WebpageProfile
 from webmcp_manifest.validate import (
     LIFECYCLE_NOTE,
+    MISSING_OUTPUT_SCHEMA_CODE,
+    MISSING_OUTPUT_SCHEMA_MESSAGE,
+    MISSING_OUTPUT_SCHEMA_SEVERITY,
     builtin_profiles,
     load_schema,
     schema_path,
@@ -39,6 +42,9 @@ EXPECTED = {
     "input-schema-not-object.json": "must be a JSON object",
     "missing-name.json": "missing name",
     "missing-description.json": "missing description",
+    "output-schema-not-object.json": "outputSchema must be a JSON object",
+    "invalid-output-schema.json": "invalid Draft 2020-12 output schema",
+    "ambiguous-output-schema-keys.json": "ambiguous output schema keys",
 }
 
 
@@ -71,6 +77,10 @@ def test_schema_file_is_draft_2020_12() -> None:
     assert schema["$id"] == "urn:insight-ui-webmcp:webmcp-manifest:1"
     assert schema_path().is_file()
     assert "debugging" in schema["$defs"]["annotations"]["properties"]
+    tool = schema["$defs"]["tool"]["properties"]
+    assert tool["outputSchema"]["$ref"] == "#/$defs/outputSchema"
+    assert tool["output_schema"]["$ref"] == "#/$defs/outputSchema"
+    assert schema["$defs"]["outputSchema"]["type"] == "object"
 
 
 @pytest.mark.unit
@@ -301,3 +311,134 @@ def test_toolspec_never_emits_debugging_without_opt_in() -> None:
     assert "debugging" not in plain["annotations"]
     opted = tool.to_dict(include_debugging=True)
     assert opted["annotations"]["debugging"] is True
+
+
+def _one_tool() -> dict:
+    data = _webpage()
+    data["tools"] = [dict(data["tools"][0])]
+    return data
+
+
+@pytest.mark.unit
+def test_output_schema_present_missing_and_invalid() -> None:
+    """Present schemas pass, missing ones are low findings, invalid ones fail."""
+    present = _one_tool()
+    present["tools"][0]["outputSchema"] = {
+        "type": "object",
+        "properties": {"sections": {"type": "array", "items": {"type": "string"}}},
+    }
+    present_result = validate_data(present)
+    assert present_result.ok, present_result.issues
+    assert present_result.findings == ()
+
+    alias = _one_tool()
+    alias["tools"][0]["output_schema"] = {"type": "string"}
+    alias_result = validate_data(alias)
+    assert alias_result.ok, alias_result.issues
+    assert alias_result.findings == ()
+
+    empty = _one_tool()
+    empty["tools"][0]["outputSchema"] = {}
+    empty_result = validate_data(empty)
+    assert empty_result.ok, empty_result.issues
+    assert empty_result.findings == ()
+
+    missing = validate_data(_one_tool())
+    assert missing.ok, missing.issues
+    assert len(missing.findings) == 1
+    finding = missing.findings[0]
+    assert finding.path == "tools[0]"
+    assert finding.code == MISSING_OUTPUT_SCHEMA_CODE
+    assert finding.severity == MISSING_OUTPUT_SCHEMA_SEVERITY
+    assert finding.message == MISSING_OUTPUT_SCHEMA_MESSAGE
+    assert missing.to_dict()["findings"] == [
+        {
+            "path": "tools[0]",
+            "code": MISSING_OUTPUT_SCHEMA_CODE,
+            "severity": MISSING_OUTPUT_SCHEMA_SEVERITY,
+            "message": MISSING_OUTPUT_SCHEMA_MESSAGE,
+        }
+    ]
+
+    webpage = validate_path(VALID_JSON)
+    assert webpage.ok, webpage.issues
+    assert len(webpage.findings) == len(_webpage()["tools"])
+    assert {item.code for item in webpage.findings} == {MISSING_OUTPUT_SCHEMA_CODE}
+    assert {item.severity for item in webpage.findings} == {MISSING_OUTPUT_SCHEMA_SEVERITY}
+
+    shaped = _one_tool()
+    shaped["tools"][0]["outputSchema"] = ["not", "an", "object"]
+    shape_result = validate_data(shaped)
+    assert shape_result.ok is False
+    assert shape_result.findings == ()
+    assert any(
+        issue.path == "tools[0].outputSchema" and "must be a JSON object" in issue.message
+        for issue in shape_result.issues
+    )
+
+    invalid = _one_tool()
+    invalid["tools"][0]["outputSchema"] = {"type": "object", "required": "not-an-array"}
+    invalid_result = validate_data(invalid)
+    assert invalid_result.ok is False
+    assert invalid_result.findings == ()
+    assert any(
+        "invalid Draft 2020-12 output schema" in issue.message for issue in invalid_result.issues
+    )
+
+    both = _one_tool()
+    both["tools"][0]["outputSchema"] = {"type": "object"}
+    both["tools"][0]["output_schema"] = {"type": "string"}
+    ambiguous = validate_data(both)
+    assert ambiguous.ok is False
+    assert any("ambiguous output schema keys" in issue.message for issue in ambiguous.issues)
+    assert ambiguous.findings == ()
+
+    mixed = _webpage()
+    mixed["tools"] = [dict(mixed["tools"][0]), dict(mixed["tools"][1])]
+    mixed["tools"][1]["outputSchema"] = {"type": "object", "properties": {}}
+    mixed_result = validate_data(mixed)
+    assert mixed_result.ok, mixed_result.issues
+    assert [item.path for item in mixed_result.findings] == ["tools[0]"]
+
+    bare = _one_tool()
+    bare["tools"][0].pop("inputSchema")
+    bare_result = validate_data(bare)
+    assert bare_result.ok is False
+    assert any("missing inputSchema" in issue.message for issue in bare_result.issues)
+    assert [item.code for item in bare_result.findings] == [MISSING_OUTPUT_SCHEMA_CODE]
+
+
+@pytest.mark.unit
+def test_missing_output_schema_stays_exit_zero(tmp_path: Path) -> None:
+    path = tmp_path / "missing-output.json"
+    path.write_text(json.dumps(_one_tool()), encoding="utf-8")
+    as_json = _run_module("validate", "--format", "json", str(path))
+    assert as_json.returncode == 0, as_json.stderr + as_json.stdout
+    payload = json.loads(as_json.stdout)
+    assert payload["ok"] is True
+    assert payload["findings"][0]["code"] == MISSING_OUTPUT_SCHEMA_CODE
+    assert payload["findings"][0]["severity"] == "low"
+
+    text = _run_module("validate", str(path))
+    assert text.returncode == 0, text.stderr + text.stdout
+    assert text.stdout.startswith("ok:")
+    assert "finding: tools[0]: [low] missing_output_schema:" in text.stdout
+
+    invalid = _run_module("validate", str(INVALID / "invalid-output-schema.json"))
+    assert invalid.returncode == 1
+    assert "invalid Draft 2020-12 output schema" in invalid.stdout
+
+
+@pytest.mark.unit
+def test_canonical_manifest_renames_output_schema_alias(tmp_path: Path) -> None:
+    from ais_webmcp.operations import canonical_manifest
+
+    data = _one_tool()
+    data["tools"][0]["output_schema"] = {"type": "object", "properties": {}}
+    path = tmp_path / "alias.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    canonical, result = canonical_manifest(path)
+    assert result.ok, result.issues
+    assert result.findings == ()
+    assert "output_schema" not in canonical["tools"][0]
+    assert canonical["tools"][0]["outputSchema"] == {"type": "object", "properties": {}}
