@@ -354,12 +354,16 @@
 
   var validators = require("./schema-validator.cjs");
   function validJsonSchemaObject(schema) {
-    return !!(
-      schema &&
-      typeof schema === "object" &&
-      !Array.isArray(schema) &&
-      validators.validateInputSchema(schema)
-    );
+    if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+      return false;
+    }
+    // A circular schema makes the meta-schema walker throw RangeError.
+    // That is an invalid schema, not an uncaught rejection.
+    try {
+      return !!validators.validateInputSchema(schema);
+    } catch (_err) {
+      return false;
+    }
   }
 
   function validInputSchema(schema) {

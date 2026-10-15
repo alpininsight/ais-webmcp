@@ -17,11 +17,6 @@ class ToolSpec:
         consequential: When True, the tool may have side effects (e.g. subscribe).
         parameters: Optional JSON-schema-like parameter object.
         input_schema: Alias-friendly schema dict written into the manifest.
-        output_schema: JSON Schema for the tool result. ``None`` omits
-            ``outputSchema``. Validation still succeeds and reports a
-            low-severity ``missing_output_schema`` finding. Pass a dict,
-            including ``{}``, to declare a schema. Prefer one for every tool
-            that returns structured data.
         read_only: Maps to ``annotations.readOnlyHint`` for non-consequential tools.
         debugging: Marks the tool itself as DevTools/inspection-only (issue #9).
             Written only when ``to_dict(include_debugging=True)``; never inferred
@@ -31,6 +26,12 @@ class ToolSpec:
             unverified sources (WebMCP ``annotations.untrustedContentHint``,
             Chrome 149+). Emitted only when True; first-party page content
             stays unmarked.
+        output_schema: JSON Schema for the tool result. ``None`` omits
+            ``outputSchema``. Validation still succeeds and reports a
+            low-severity ``missing_output_schema`` finding. Pass a dict,
+            including ``{}``, to declare a schema. Prefer one for every tool
+            that returns structured data. Last so existing positional
+            constructors keep their meaning.
     """
 
     id: str
@@ -39,11 +40,11 @@ class ToolSpec:
     consequential: bool = False
     parameters: dict[str, Any] = field(default_factory=dict)
     input_schema: dict[str, Any] = field(default_factory=dict)
-    output_schema: dict[str, Any] | None = None
     read_only: bool = False
     debugging: bool = False
     group: str | None = None
     untrusted_content: bool = False
+    output_schema: dict[str, Any] | None = None
 
     def to_dict(self, *, include_debugging: bool = False) -> dict[str, Any]:
         """Serialize to a manifest object that satisfies the shared schema.

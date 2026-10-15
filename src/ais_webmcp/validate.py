@@ -88,8 +88,8 @@ class ValidationResult:
     source: str
     issues: tuple[ValidationIssue, ...]
     notes: tuple[str, ...] = (LIFECYCLE_NOTE,)
-    findings: tuple[ValidationFinding, ...] = ()
     fatal: bool = False
+    findings: tuple[ValidationFinding, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-friendly result. ``notes`` always includes the abort lifecycle note."""

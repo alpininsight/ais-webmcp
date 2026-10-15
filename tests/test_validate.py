@@ -19,8 +19,11 @@ from webmcp_manifest.validate import (
     MISSING_OUTPUT_SCHEMA_CODE,
     MISSING_OUTPUT_SCHEMA_MESSAGE,
     MISSING_OUTPUT_SCHEMA_SEVERITY,
+    ValidationResult,
     builtin_profiles,
+    exit_code,
     load_schema,
+    render_text,
     schema_path,
     validate_data,
     validate_path,
@@ -430,6 +433,21 @@ def test_missing_output_schema_stays_exit_zero(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_validation_result_positional_fatal_stays_fatal() -> None:
+    """findings is appended after fatal, so historical positional calls stay exit 2."""
+    result = ValidationResult(False, "missing.json", (), (LIFECYCLE_NOTE,), True)
+    assert result.fatal is True
+    assert result.findings == ()
+    assert result.ok is False
+    assert exit_code([result]) == 2
+    payload = result.to_dict()
+    assert payload["fatal"] is True
+    assert payload["findings"] == []
+    text = render_text([result])
+    assert text.startswith("error: missing.json")
+    assert "finding:" not in text
+
+
 def test_canonical_manifest_renames_output_schema_alias(tmp_path: Path) -> None:
     from ais_webmcp.operations import canonical_manifest
 

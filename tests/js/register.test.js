@@ -955,6 +955,23 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal("outputSchema" in ctx.registerCalls[0].tool, false);
   });
 
+  it("returns ok false for a circular output schema", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const outputSchema = { type: "object" };
+    outputSchema.properties = { self: outputSchema };
+    const result = await api.registerTool({
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => ({}),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /output schema/i);
+    assert.equal(ctx.registerCalls.length, 0);
+  });
+
   it("rejects an invalid or ambiguous output schema", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

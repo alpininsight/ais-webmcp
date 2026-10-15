@@ -138,6 +138,44 @@ def test_tool_spec_to_dict_uses_input_schema() -> None:
 
 
 @pytest.mark.unit
+def test_tool_spec_positional_args_keep_read_only() -> None:
+    """output_schema is last, so historical positional calls still set read_only."""
+    legacy = ToolSpec(
+        "go_to_section",
+        "Go to section",
+        "Navigate",
+        False,
+        {},
+        {},
+        True,
+    )
+    assert legacy.read_only is True
+    assert legacy.output_schema is None
+    assert legacy.debugging is False
+    assert legacy.untrusted_content is False
+    data = legacy.to_dict()
+    assert data["annotations"]["readOnlyHint"] is True
+    assert "outputSchema" not in data
+
+    declared = ToolSpec(
+        "list_sections",
+        "List sections",
+        "List",
+        False,
+        {},
+        {},
+        True,
+        False,
+        None,
+        False,
+        {"type": "object", "properties": {}},
+    )
+    assert declared.read_only is True
+    assert declared.output_schema == {"type": "object", "properties": {}}
+    assert declared.to_dict()["outputSchema"] == {"type": "object", "properties": {}}
+
+
+@pytest.mark.unit
 def test_unknown_profile_raises() -> None:
     with pytest.raises(KeyError, match="Unknown WebMCP profile"):
         get_profile("does-not-exist")
