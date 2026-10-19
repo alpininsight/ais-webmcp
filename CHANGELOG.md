@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Prepare the public npm package `@alpininsightsolutions/webmcp` for the
+  browser runtime. The tarball allowlist is the built bundle, its types,
+  README, LICENSE, and NOTICE. Enterprise paths, `webmcp_check`, and `.env`
+  files fail the pack guard. Publish uses Trusted Publishing from an `npm-v*`
+  tag on main and does not store an npm token.
 - Accept an optional Draft 2020-12 `outputSchema` (alias `output_schema`) on
   each tool. A present schema is validated; a missing one stays valid and is
   reported as finding code `missing_output_schema` at severity `low`.

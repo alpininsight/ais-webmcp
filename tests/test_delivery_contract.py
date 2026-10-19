@@ -35,7 +35,7 @@ def test_ci_uses_central_repository_policy():
         for name, body in callers.items()
         if any("runs-on" in job for job in body["jobs"].values())
     ]
-    assert set(local_runs) <= {"ci.yml", "release.yml"}
+    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml"}
 
 
 @pytest.mark.parametrize(
@@ -76,6 +76,57 @@ def test_publication_requires_source_check_and_review(
     monkeypatch.setattr(publication, "api", api)
     with pytest.raises(ValueError):
         publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
+
+
+def test_npm_publish_is_trusted_publishing_without_tokens():
+    """npm Trusted Publishing is OIDC on npm-release. No token, no secret."""
+    text = (ROOT / ".github/workflows/npm-publish.yml").read_text()
+    assert "secrets." not in text
+    assert text.count("NODE_AUTH_TOKEN") == 1
+    assert text.count("NPM_TOKEN") == 1
+    assert 'test -z "${NODE_AUTH_TOKEN:-}"' in text
+    assert 'test -z "${NPM_TOKEN:-}"' in text
+    workflow = yaml.safe_load(text)
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"push", "workflow_dispatch"}
+    assert triggers["push"] == {"tags": ["npm-v*"]}
+    assert workflow["permissions"] == {"contents": "read"}
+    version = workflow["jobs"]["version"]
+    assert version["uses"].endswith("/gitversion-reusable.yml@main")
+    assert version["with"]["checkout_ref"] == "${{ github.sha }}"
+    publish = workflow["jobs"]["publish"]
+    assert publish["environment"] == "npm-release"
+    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    assert publish["runs-on"] == "general"
+    assert "secrets" not in publish
+    joined = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "npm run check:js-build" in joined
+    assert "npm test" in joined
+    assert "scripts/check-npm-pack.cjs" in joined
+    assert "scripts/sync-npm-version.cjs" in joined
+    assert "npm publish --provenance --access public" in joined
+    assert "npm@11.5.1" in joined
+    assert "refs/heads/main" in joined
+    assert "refs/tags/npm-v" in joined
+    node = next(
+        step
+        for step in publish["steps"]
+        if str(step.get("uses", "")).startswith("actions/setup-node@")
+    )
+    assert node["uses"].startswith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
+    assert node["with"]["node-version"] == "24"
+    assert "registry-url" not in node["with"]
+    checkout = next(
+        step
+        for step in publish["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+    assert checkout["uses"].startswith("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+    assert checkout["with"]["persist-credentials"] is False
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    guard = ci["jobs"]["npm-pack"]
+    assert "scripts/check-npm-pack.cjs" in guard["steps"][-1]["run"]
+    assert "npm-pack" in ci["jobs"]["gate"]["needs"]
 
 
 def test_cdn_workflow_cannot_promote_preview_to_latest():

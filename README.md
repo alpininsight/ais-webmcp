@@ -62,6 +62,20 @@ installed core rather than shipping a second copy.
 
 Development preview; the first public PyPI/CDN release is pending.
 
+## Public npm package
+
+The browser runtime is prepared as the public package
+`@alpininsightsolutions/webmcp`. Enterprise code never goes to npm. The
+tarball is only the built `register.js`, its types, this README, `LICENSE`,
+and `NOTICE` (`package.json` is included because npm always packs it). A path
+under `enterprise/`, a path containing `webmcp_check`, or a `.env` file fails
+the tarball guard.
+
+The committed npm version is the `0.0.0` placeholder. Publish stamps
+GitVersion's Major.Minor.Patch, the same version as the Python package.
+One-time npmjs.com setup (owner: Peter) and the publish rule are in
+[docs/release.md](docs/release.md).
+
 ## Development
 
 ```bash

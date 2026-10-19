@@ -1,13 +1,44 @@
 {
-  "name": "ais-webmcp-assets",
-  "private": true,
+  "name": "@alpininsightsolutions/webmcp",
+  "version": "0.0.0",
+  "description": "Browser runtime that registers WebMCP tools for a website",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alpininsight/ais-webmcp.git"
+  },
+  "homepage": "https://github.com/alpininsight/ais-webmcp#readme",
+  "bugs": {
+    "url": "https://github.com/alpininsight/ais-webmcp/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "main": "./src/ais_webmcp/assets/register.js",
+  "types": "./src/ais_webmcp/assets/register.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/ais_webmcp/assets/register.d.ts",
+      "default": "./src/ais_webmcp/assets/register.js"
+    }
+  },
+  "files": [
+    "src/ais_webmcp/assets/register.js",
+    "src/ais_webmcp/assets/register.d.ts",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
     "build:js": "node scripts/build-js.cjs",
     "check:js-build": "node scripts/build-js.cjs --check",
-    "test": "node --test tests/js/*.test.js"
+    "test": "node --test tests/js/*.test.js",
+    "check:npm-pack": "node scripts/check-npm-pack.cjs",
+    "sync:npm-version": "node scripts/sync-npm-version.cjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",
