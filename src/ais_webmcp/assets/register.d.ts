@@ -70,12 +70,19 @@ declare namespace InsightUiWebmcp {
     description: string;
     execute: WebmcpExecute;
     title?: string;
-    outputSchema?: object;
-    output_schema?: object;
     consequential?: boolean;
     enabled?: boolean;
     group?: string;
     annotations?: WebmcpAnnotations;
+  }
+
+  /**
+   * `validInputSchema` accepts only a non-array schema whose `type` is
+   * `"object"`. Other JSON Schema keywords stay open.
+   */
+  interface WebmcpObjectInputSchema {
+    type: "object";
+    [keyword: string]: unknown;
   }
 
   /**
@@ -84,24 +91,30 @@ declare namespace InsightUiWebmcp {
    */
   type WebmcpInputSchema =
     | {
-        inputSchema: object;
+        inputSchema: WebmcpObjectInputSchema;
         parameters?: never;
         input_schema?: never;
       }
     | {
-        parameters: object;
+        parameters: WebmcpObjectInputSchema;
         inputSchema?: never;
         input_schema?: never;
       }
     | {
-        input_schema: object;
+        input_schema: WebmcpObjectInputSchema;
         inputSchema?: never;
         parameters?: never;
       };
 
+  /** At most one output-schema alias. Omitting both stays valid. */
+  type WebmcpOutputSchema =
+    | { outputSchema?: object; output_schema?: never }
+    | { output_schema?: object; outputSchema?: never };
+
   /** The runtime uses `id` when it is set, and otherwise `name`. */
   type WebmcpToolSpec = WebmcpToolFields &
     WebmcpInputSchema &
+    WebmcpOutputSchema &
     ({ id: string; name?: string } | { name: string; id?: string });
 
   interface WebmcpManifestToolFields {
@@ -109,15 +122,15 @@ declare namespace InsightUiWebmcp {
     description: string;
     id?: string;
     title?: string;
-    outputSchema?: object;
-    output_schema?: object;
     consequential?: boolean;
     enabled?: boolean;
     group?: string;
     annotations?: WebmcpAnnotations;
   }
 
-  type WebmcpManifestTool = WebmcpManifestToolFields & WebmcpInputSchema;
+  type WebmcpManifestTool = WebmcpManifestToolFields &
+    WebmcpInputSchema &
+    WebmcpOutputSchema;
 
   /** Top-level fields accepted by the manifest schema. */
   interface WebmcpManifest {

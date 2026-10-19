@@ -27,7 +27,7 @@ const manifest = {
       name: "Search the page",
       description: "Search the page",
       id: "search",
-      inputSchema: { type: "object" },
+      inputSchema: { type: "object" as const },
     },
   ],
 };
@@ -110,9 +110,39 @@ async function useRuntime(): Promise<void> {
       {
         name: "Search",
         description: "Search",
-        parameters: { type: "object" },
+        parameters: { type: "object", properties: { q: { type: "string" } } },
+        outputSchema: { type: "object" },
       },
     ],
+  });
+  await api.registerTool({
+    id: "a_tool",
+    description: "string schema",
+    // @ts-expect-error input schemas must use type object
+    inputSchema: { type: "string" },
+    execute() {
+      return { ok: true };
+    },
+  });
+  await api.registerTool({
+    id: "a_tool",
+    description: "array schema",
+    // @ts-expect-error an array is not an input schema
+    inputSchema: [],
+    execute() {
+      return { ok: true };
+    },
+  });
+  // @ts-expect-error output schema aliases are exclusive
+  await api.registerTool({
+    name: "a_tool",
+    description: "two output schemas",
+    inputSchema: { type: "object" },
+    outputSchema: { type: "object" },
+    output_schema: { type: "string" },
+    execute() {
+      return { ok: true };
+    },
   });
   const failure = batch.errors[0];
   if (failure) {
