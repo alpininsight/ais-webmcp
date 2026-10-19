@@ -1,0 +1,27 @@
+name: npm publish
+# Thin caller. Publish logic is alpininsight/.github-private
+# .github/workflows/npm-publish-reusable.yml (.github-private#730).
+# Trusted publisher: repository ais-webmcp, this filename, environment
+# npm-ais-webmcp. No npm token. The first publish is a manual bootstrap.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    # TODO(.github-private#730): confirm these input names if the merged
+    # contract differs. A caller job cannot set environment.
+    uses: alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main
+    with:
+      tag: ${{ inputs.tag }}
+      environment: npm-ais-webmcp

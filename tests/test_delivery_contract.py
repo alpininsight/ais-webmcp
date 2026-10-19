@@ -79,14 +79,31 @@ def test_publication_requires_source_check_and_review(
         publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
 
 
-def test_npm_publish_stays_in_the_central_publisher():
-    """npm Trusted Publishing lives in .github-private. This repo guards the tarball."""
+def test_npm_publish_caller_uses_the_central_reusable_workflow():
+    """OIDC identity is this repo. Publish logic stays in .github-private."""
     workflows = ROOT / ".github/workflows"
-    assert not (workflows / "npm-publish.yml").exists()
+    text = (workflows / "npm-publish.yml").read_text()
     workflow_text = "\n".join(path.read_text() for path in sorted(workflows.glob("*.yml")))
     assert "npm-release" not in workflow_text
-    assert "npm-v" not in workflow_text
-    assert "npm publish" not in workflow_text
+    assert re.search(r"npm-v(?!ersion)", workflow_text) is None
+    assert "npm publish --provenance" not in workflow_text
+    workflow = yaml.safe_load(text)
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"workflow_dispatch"}
+    assert triggers["workflow_dispatch"]["inputs"]["tag"]["required"] is True
+    assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
+    publish = workflow["jobs"]["publish"]
+    assert publish["if"] == "github.ref == 'refs/heads/main'"
+    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "runs-on" not in publish
+    assert "environment" not in publish
+    assert publish["uses"] == (
+        "alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main"
+    )
+    assert publish["with"] == {
+        "tag": "${{ inputs.tag }}",
+        "environment": "npm-ais-webmcp",
+    }
 
     package = json.loads((ROOT / "package.json").read_text())
     assert package["name"] == "@alpininsightsolutions/webmcp"
@@ -96,16 +113,19 @@ def test_npm_publish_stays_in_the_central_publisher():
 
     readme = (ROOT / "README.md").read_text()
     release_doc = (ROOT / "docs/release.md").read_text()
-    for text in (readme, release_doc):
-        assert "ais-webmcp-publish-npm.yml" in text
-        assert "npm-ais-webmcp" in text
-        assert ".github-private" in text
-        assert "Peter's go" in text
-        assert "Trusted Publishing" in text
-        assert "provenance" in text
-        assert "npm-release" not in text
-        assert "npm-publish.yml" not in text
-        assert re.search(r"npm-v(?!ersion)", text) is None
+    for doc in (readme, release_doc):
+        assert "npm-publish.yml" in doc
+        assert "npm-publish-reusable.yml" in doc
+        assert "npm-ais-webmcp" in doc
+        assert ".github-private" in doc
+        assert "alpininsight/ais-webmcp" in doc
+        assert "Peter's go" in doc
+        assert "Trusted Publishing" in doc
+        assert "provenance" in doc
+        assert "manual bootstrap" in doc
+        assert "npm-release" not in doc
+        assert "ais-webmcp-publish-npm.yml" not in doc
+        assert re.search(r"npm-v(?!ersion)", doc) is None
 
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
     guard = ci["jobs"]["npm-pack"]
