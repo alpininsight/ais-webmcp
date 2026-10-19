@@ -145,6 +145,46 @@ async function useRuntime(): Promise<void> {
       return { ok: true };
     },
   });
+  await api.registerTool({
+    id: "a_tool",
+    description: "array output schema",
+    inputSchema: { type: "object" },
+    // @ts-expect-error an array is not an output schema
+    outputSchema: [],
+    execute() {
+      return { ok: true };
+    },
+  });
+  await api.registerTool({
+    id: "a_tool",
+    description: "array output schema alias",
+    inputSchema: { type: "object" },
+    // @ts-expect-error an array is not an output schema
+    output_schema: [],
+    execute() {
+      return { ok: true };
+    },
+  });
+  await api.registerFromManifest({
+    profile: "webpage",
+    version: "1",
+    tools: [
+      {
+        name: "Subscribe",
+        description: "Subscribe",
+        inputSchema: { type: "object" },
+        consequential: true,
+        enabled: false,
+      },
+      // @ts-expect-error consequential manifest tools require enabled
+      {
+        name: "Subscribe now",
+        description: "Subscribe",
+        inputSchema: { type: "object" },
+        consequential: true,
+      },
+    ],
+  });
   const failure = batch.errors[0];
   if (failure) {
     // @ts-expect-error manifest-level errors do not include ok

@@ -106,10 +106,16 @@ declare namespace InsightUiWebmcp {
         parameters?: never;
       };
 
-  /** At most one output-schema alias. Omitting both stays valid. */
+  /**
+   * `validJsonSchemaObject` accepts a non-array object. Arrays satisfy
+   * `object`, so this uses a string index signature. At most one
+   * output-schema alias. Omitting both stays valid.
+   */
+  type WebmcpJsonSchemaObject = { [keyword: string]: unknown };
+
   type WebmcpOutputSchema =
-    | { outputSchema?: object; output_schema?: never }
-    | { output_schema?: object; outputSchema?: never };
+    | { outputSchema?: WebmcpJsonSchemaObject; output_schema?: never }
+    | { output_schema?: WebmcpJsonSchemaObject; outputSchema?: never };
 
   /** The runtime uses `id` when it is set, and otherwise `name`. */
   type WebmcpToolSpec = WebmcpToolFields &
@@ -117,16 +123,24 @@ declare namespace InsightUiWebmcp {
     WebmcpOutputSchema &
     ({ id: string; name?: string } | { name: string; id?: string });
 
-  interface WebmcpManifestToolFields {
+  interface WebmcpManifestToolBase {
     name: string;
     description: string;
     id?: string;
     title?: string;
-    consequential?: boolean;
-    enabled?: boolean;
     group?: string;
     annotations?: WebmcpAnnotations;
   }
+
+  /**
+   * The manifest schema requires `enabled` when `consequential` is true.
+   * `enabled: false` remains valid.
+   */
+  type WebmcpManifestToolFields = WebmcpManifestToolBase &
+    (
+      | { consequential?: false; enabled?: boolean }
+      | { consequential: true; enabled: boolean }
+    );
 
   type WebmcpManifestTool = WebmcpManifestToolFields &
     WebmcpInputSchema &
