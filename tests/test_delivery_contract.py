@@ -80,15 +80,17 @@ def test_publication_requires_source_check_and_review(
 
 
 def test_npm_publish_runs_in_this_repository():
-    """Trusted Publishing runs here on a GitHub-hosted runner. No private caller."""
+    """The publish workflow is the npm publication template. No private caller."""
     workflows = ROOT / ".github/workflows"
-    text = (workflows / "npm-publish.yml").read_text()
+    workflow_path = workflows / "npm-publish.yml"
+    text = workflow_path.read_text()
     workflow_text = "\n".join(path.read_text() for path in sorted(workflows.glob("*.yml")))
     assert "npm-release" not in workflow_text
     assert re.search(r"npm-v(?!ersion)", workflow_text) is None
     assert "npm-publish-reusable.yml" not in workflow_text
-    assert text.startswith(
-        "name: npm publish\n# canonical template: alpininsight/.github-private (npm standard)\n"
+    assert (
+        hashlib.sha256(workflow_path.read_bytes()).hexdigest()
+        == "d9f3e48e9fe78d326dd4bcc2985b75c6b8425455cdb97749052a82dae3b106e5"
     )
     workflow = yaml.safe_load(text)
     triggers = workflow.get("on", workflow.get(True))
@@ -100,15 +102,16 @@ def test_npm_publish_runs_in_this_repository():
     publish = workflow["jobs"]["publish"]
     assert publish["if"] == "github.ref == 'refs/heads/main'"
     assert publish["runs-on"] == "ubuntu-latest"
-    assert publish["environment"] == "npm-ais-webmcp"
-    assert publish["permissions"] == permissions
+    assert publish["environment"] == "npm-${{ github.event.repository.name }}"
+    assert "permissions" not in publish
     assert "secrets" not in publish
     assert "uses" not in publish
     joined = "\n".join(step.get("run", "") for step in publish["steps"])
-    assert "npm ci" in joined
+    assert "npm ci --ignore-scripts" in joined
     assert "npm run check:pack" in joined
-    assert "scripts/sync-npm-version.cjs" in joined
+    assert "scripts/sync-npm-version.cjs" not in joined
     assert "npm run build:release --if-present" in joined
+    assert "npm pack --ignore-scripts" in joined
     assert "npm publish --provenance --access public --ignore-scripts" in joined
     checkout = next(
         step
@@ -124,12 +127,19 @@ def test_npm_publish_runs_in_this_repository():
         if str(step.get("uses", "")).startswith("actions/setup-node@")
     )
     assert node["uses"].startswith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
-    assert node["with"]["node-version-file"] == ".nvmrc"
+    assert node["with"]["node-version"] == "${{ steps.node.outputs.version }}"
     assert "registry-url" not in node["with"]
 
     package = json.loads((ROOT / "package.json").read_text())
     assert package["name"] == "@alpininsightsolutions/webmcp"
+    assert package["license"] == "Apache-2.0"
+    assert {"LICENSE", "NOTICE"} <= set(package["files"])
+    assert package["scripts"]["build:release"] == "npm run build:js"
     assert package["repository"]["url"] == "git+https://github.com/alpininsight/ais-webmcp.git"
+    nvmrc = (ROOT / ".nvmrc").read_text().strip().removeprefix("v")
+    parts = [int(part) for part in nvmrc.split(".")]
+    parts += [0] * (3 - len(parts))
+    assert tuple(parts) >= (22, 14, 0)
     assert (ROOT / "scripts/check-npm-pack.cjs").is_file()
     assert (ROOT / "scripts/sync-npm-version.cjs").is_file()
     assert (ROOT / "src/ais_webmcp/assets/register.d.ts").is_file()

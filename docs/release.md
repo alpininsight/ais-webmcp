@@ -2,17 +2,20 @@
 
 `@alpininsightsolutions/webmcp` is the public browser runtime. Publishing
 runs from `.github/workflows/npm-publish.yml`. It is a manual
-`workflow_dispatch` on `main` with a `vX.Y.Z` tag input, environment
-`npm-ais-webmcp`, and permissions `contents: read` and `id-token: write`.
-It checks out that tag, installs Node from `.nvmrc`, runs `npm ci` and
-`npm run check:pack`, stamps the tag into `package.json`, runs
-`npm run build:release`, then runs
-`npm publish --provenance --access public --ignore-scripts`.
+`workflow_dispatch` on `main` with a stable `vX.Y.Z` tag. That tag must point
+at the `main` commit. The job uses environment `npm-ais-webmcp` and
+permissions `contents: read` and `id-token: write`. It checks out the tag,
+installs Node from `.nvmrc` (Node 24) and npm 11.5.1, runs
+`npm ci --ignore-scripts` and `npm run check:pack`, then stamps the tag into
+`package.json`. The stamp keeps the `@alpininsightsolutions` scope, license
+`Apache-2.0`, a files allowlist that includes `LICENSE` and `NOTICE`, and
+repository URL `git+https://github.com/alpininsight/ais-webmcp.git`. It then
+runs `npm run build:release`, packs the tarball, and runs
+`npm publish --provenance --access public --ignore-scripts` on that file.
 Trusted Publishing attaches provenance. No npm token. The trusted publisher
-is bound to GitHub repository
-`alpininsight/ais-webmcp`, workflow filename `npm-publish.yml`, and
-environment `npm-ais-webmcp`. A release goes out only with Peter's go. The
-first publish is the manual bootstrap from `main`.
+is bound to GitHub repository `alpininsight/ais-webmcp`, workflow filename
+`npm-publish.yml`, and environment `npm-ais-webmcp`. A release goes out only
+with Peter's go. The first publish is the manual bootstrap from `main`.
 
 ## Version
 
@@ -23,9 +26,10 @@ version, so `InsightUiWebmcp.version` matches the npm package.
 
 The workflow takes the `vX.Y.Z` tag, strips the leading `v`, and writes
 that exact `MAJOR.MINOR.PATCH` into `package.json`. That tag is the same
-release version as the Python package. The next step runs
-`npm run build:release`, which builds `register.js` from that version.
-`0.0.0` and pre-release versions are refused.
+release version as the Python package. The stamp refuses `0.0.0`,
+pre-release versions, a private package, and a files allowlist that omits
+`LICENSE` or `NOTICE`. The next step runs `npm run build:release`, which
+builds `register.js` from that version.
 
 ## One-time setup on npmjs.com
 
