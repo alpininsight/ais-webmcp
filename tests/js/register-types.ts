@@ -32,13 +32,59 @@ const manifest = {
   ],
 };
 
+interface SearchHandlers {
+  search(input: { q: string }): { results: string[] };
+}
+
+const handlers: SearchHandlers = {
+  search(input) {
+    return { results: [input.q] };
+  },
+};
+
+interface IdOnlyTool {
+  id: string;
+  description: string;
+  inputSchema: { type: "object" };
+  execute(input: { q: string }): { ok: true };
+}
+
+const idOnly: IdOnlyTool = {
+  id: "a_tool",
+  description: "Search by id",
+  inputSchema: { type: "object" },
+  execute() {
+    return { ok: true };
+  },
+};
+
 async function useRuntime(): Promise<void> {
   await api.registerTool(search);
-  const batch = await api.registerFromManifest(manifest, {
-    search(input: { q: string }) {
-      return { results: [input.q] };
+  await api.registerTool(idOnly);
+  await api.registerTool({
+    id: "a_tool",
+    description: "Search by id",
+    inputSchema: { type: "object" },
+    execute() {
+      return { ok: true };
     },
   });
+  await api.registerFromManifest(manifest);
+  const batch = await api.registerFromManifest(manifest, handlers);
+  // @ts-expect-error a tool spec needs id or name
+  await api.registerTool({
+    description: "missing identifier",
+    inputSchema: { type: "object" },
+    execute() {
+      return { ok: true };
+    },
+  });
+  interface BadHandlers {
+    search: string;
+  }
+  const badHandlers: BadHandlers = { search: "nope" };
+  // @ts-expect-error handler properties must be execute functions
+  await api.registerFromManifest(manifest, badHandlers);
   const failure = batch.errors[0];
   if (failure) {
     // @ts-expect-error manifest-level errors do not include ok

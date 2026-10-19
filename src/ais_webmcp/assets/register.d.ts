@@ -20,9 +20,11 @@ declare const InsightUiWebmcp: {
     spec: InsightUiWebmcp.WebmcpToolSpec,
     options?: { signal?: AbortSignal },
   ): Promise<InsightUiWebmcp.WebmcpToolResult>;
-  registerFromManifest(
+  registerFromManifest<
+    Handlers extends InsightUiWebmcp.WebmcpHandlerMap<Handlers>,
+  >(
     manifest: InsightUiWebmcp.WebmcpManifest,
-    handlers?: Readonly<Record<string, InsightUiWebmcp.WebmcpExecute>>,
+    handlers?: Handlers,
     options?: { signal?: AbortSignal },
   ): Promise<InsightUiWebmcp.WebmcpManifestRegistration>;
   registerDefaults(): Promise<number>;
@@ -56,11 +58,17 @@ declare namespace InsightUiWebmcp {
     options?: { signal?: AbortSignal },
   ) => unknown;
 
-  interface WebmcpToolSpec {
-    name: string;
+  /**
+   * Known handler ids only. A named interface does not need a string index
+   * signature; each of its properties must be an execute function.
+   */
+  type WebmcpHandlerMap<Handlers> = {
+    [ToolId in keyof Handlers]: WebmcpExecute;
+  };
+
+  interface WebmcpToolFields {
     description: string;
     execute: WebmcpExecute;
-    id?: string;
     title?: string;
     inputSchema?: object;
     parameters?: object;
@@ -72,6 +80,10 @@ declare namespace InsightUiWebmcp {
     group?: string;
     annotations?: WebmcpAnnotations;
   }
+
+  /** The runtime uses `id` when it is set, and otherwise `name`. */
+  type WebmcpToolSpec = WebmcpToolFields &
+    ({ id: string; name?: string } | { name: string; id?: string });
 
   interface WebmcpManifestTool {
     name: string;
