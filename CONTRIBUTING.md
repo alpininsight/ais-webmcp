@@ -30,8 +30,7 @@ uv run --locked pre-commit run --all-files
 ```
 
 `npm test` runs the JavaScript tests and the TypeScript check.
-`node scripts/check-npm-pack.cjs` is the npm tarball guard, the same check
-as the CI job `npm-pack`.
+`node scripts/check-npm-pack.cjs` is the npm tarball guard.
 
 ## Pull requests
 

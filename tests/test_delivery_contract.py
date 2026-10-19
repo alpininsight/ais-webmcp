@@ -108,7 +108,7 @@ def test_npm_publish_runs_in_this_repository():
     assert "npm ci" in joined
     assert "npm run check:pack" in joined
     assert "scripts/sync-npm-version.cjs" in joined
-    assert "npm run build:js" in joined
+    assert "npm run build:release --if-present" in joined
     assert "npm publish --provenance --access public --ignore-scripts" in joined
     checkout = next(
         step
@@ -138,18 +138,29 @@ def test_npm_publish_runs_in_this_repository():
     release_doc = (ROOT / "docs/release.md").read_text()
     for doc in (readme, release_doc):
         assert "npm-publish.yml" in doc
-        assert "npm-publish-reusable.yml" not in doc
-        assert "ubuntu-latest" in doc
         assert "npm-ais-webmcp" in doc
-        assert ".github-private" in doc
         assert "alpininsight/ais-webmcp" in doc
         assert "Peter's go" in doc
         assert "Trusted Publishing" in doc
         assert "provenance" in doc
         assert "manual bootstrap" in doc
-        assert "npm-release" not in doc
-        assert "ais-webmcp-publish-npm.yml" not in doc
+        assert "build:release" in doc
+        for forbidden in (
+            "npm-publish-reusable.yml",
+            ".github-private",
+            "ubuntu-latest",
+            "CDN",
+            "cdn.",
+            "Cloudflare",
+            "OpenBao",
+            "self-hosted",
+            "npm-release",
+            "ais-webmcp-publish-npm.yml",
+        ):
+            assert forbidden not in doc, forbidden
         assert re.search(r"npm-v(?!ersion)", doc) is None
+        assert re.search(r"\bR2\b", doc) is None
+        assert re.search(r"\bk8s\b", doc) is None
 
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
     guard = ci["jobs"]["npm-pack"]

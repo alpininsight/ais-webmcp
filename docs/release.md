@@ -1,18 +1,15 @@
 # npm release
 
 `@alpininsightsolutions/webmcp` is the public browser runtime. Publishing
-runs in this repository. `.github/workflows/npm-publish.yml` is the canonical
-npm standard from `alpininsight/.github-private`. A public repository cannot
-call a private reusable workflow, and npm Trusted Publishing requires the
-publish to run here on a GitHub-hosted runner, so the job uses
-`ubuntu-latest`. It is a manual `workflow_dispatch` on `main` with a
-`vX.Y.Z` tag input, environment `npm-ais-webmcp`, and permissions
-`contents: read` and `id-token: write`. It checks out that tag, installs
-Node from `.nvmrc` with npm >= 11.5.1, runs `npm ci` and `npm run check:pack`,
-stamps the tag with `scripts/sync-npm-version.cjs`, injects that version with
-`npm run build:js`, then runs
+runs from `.github/workflows/npm-publish.yml`. It is a manual
+`workflow_dispatch` on `main` with a `vX.Y.Z` tag input, environment
+`npm-ais-webmcp`, and permissions `contents: read` and `id-token: write`.
+It checks out that tag, installs Node from `.nvmrc`, runs `npm ci` and
+`npm run check:pack`, stamps the tag into `package.json`, runs
+`npm run build:release`, then runs
 `npm publish --provenance --access public --ignore-scripts`.
-No npm token. The trusted publisher is bound to GitHub repository
+Trusted Publishing attaches provenance. No npm token. The trusted publisher
+is bound to GitHub repository
 `alpininsight/ais-webmcp`, workflow filename `npm-publish.yml`, and
 environment `npm-ais-webmcp`. A release goes out only with Peter's go. The
 first publish is the manual bootstrap from `main`.
@@ -24,12 +21,11 @@ second version source. `js/register.source.cjs` keeps that same placeholder.
 `scripts/build-js.cjs` replaces it in the built bundle with `package.json`'s
 version, so `InsightUiWebmcp.version` matches the npm package.
 
-The workflow takes the `vX.Y.Z` tag, strips the leading `v`, and
-`scripts/sync-npm-version.cjs` writes that exact `MAJOR.MINOR.PATCH` into
-`package.json`. That tag is the same release version
-`scripts/build_delivery.py` stamps into the Python package. The next step
-runs `npm run build:js`, which injects it into `register.js`. `0.0.0` and
-pre-release versions are refused.
+The workflow takes the `vX.Y.Z` tag, strips the leading `v`, and writes
+that exact `MAJOR.MINOR.PATCH` into `package.json`. That tag is the same
+release version as the Python package. The next step runs
+`npm run build:release`, which builds `register.js` from that version.
+`0.0.0` and pre-release versions are refused.
 
 ## One-time setup on npmjs.com
 
@@ -60,8 +56,8 @@ Owner: Peter. Publish only with Peter's go.
 
 Only the built browser bundle, its types, `README.md`, `LICENSE`, and
 `NOTICE` are in the `files` allowlist. npm also packs `package.json`. The
-tarball guard (`scripts/check-npm-pack.cjs`, CI job `npm-pack`) runs
-`npm pack --dry-run --json` and fails when any other path is present, when
+tarball guard (`scripts/check-npm-pack.cjs`) runs `npm pack --dry-run --json`
+and fails when any other path is present, when
 `LICENSE` or `NOTICE` is missing, or when any path matches `enterprise/`,
 `webmcp_check`, or `.env`.
 
