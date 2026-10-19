@@ -96,6 +96,8 @@ jobs:
             test "$SOURCE_REF" = "refs/tags/npm-v${PACKAGE_VERSION}"
           fi
           node scripts/sync-npm-version.cjs --version "$PACKAGE_VERSION"
+      - name: Inject the package version into the browser bundle
+        run: npm run build:js
       - name: npm pack --dry-run --json
         run: node scripts/check-npm-pack.cjs
       - name: Publish to npm

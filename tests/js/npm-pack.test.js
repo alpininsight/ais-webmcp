@@ -92,14 +92,20 @@ test("publish stamps the Python package version and refuses placeholders", () =>
     path.join(root, "package.json"),
     `${JSON.stringify({ name: "@alpininsightsolutions/webmcp", version: "0.0.0" }, null, 2)}\n`,
   );
-  fs.writeFileSync(
-    path.join(assets, "register.js"),
-    'var api={version:"0.0.0"};\n',
-  );
+  const runtime = path.join(assets, "register.js");
+  fs.writeFileSync(runtime, 'var api={version:"0.0.0"};\n');
+  const before = fs.readFileSync(runtime, "utf8");
   stamp(root, "1.2.3");
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version, "1.2.3");
-  assert.match(fs.readFileSync(path.join(assets, "register.js"), "utf8"), /version:"1\.2\.3"/);
+  assert.equal(fs.readFileSync(runtime, "utf8"), before);
   assert.throws(() => stamp(root, "1.2.4"), /exactly once/);
+});
+
+test("built bundle version equals package.json", () => {
+  const manifest = pkg();
+  const bundle = fs.readFileSync(path.join(ROOT, BUNDLE), "utf8");
+  const found = [...bundle.matchAll(/version\s*:\s*"([^"]*)"/g)].map((match) => match[1]);
+  assert.deepEqual(found, [manifest.version]);
 });
 
 test("npm pack dry run stays inside the allowlist", () => {

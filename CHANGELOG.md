@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Inject `package.json`'s version into `InsightUiWebmcp.version` when
+  building `register.js`. Publish syncs that version from the Python package
+  before the build.
 - Prepare the public npm package `@alpininsightsolutions/webmcp` for the
   browser runtime. The tarball allowlist is the built bundle, its types,
   README, LICENSE, and NOTICE. Enterprise paths, `webmcp_check`, and `.env`

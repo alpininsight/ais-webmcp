@@ -104,7 +104,11 @@ def test_npm_publish_is_trusted_publishing_without_tokens():
     assert "npm test" in joined
     assert "scripts/check-npm-pack.cjs" in joined
     assert "scripts/sync-npm-version.cjs" in joined
+    assert "npm run build:js" in joined
     assert "npm publish --provenance --access public" in joined
+    runs = [step.get("run", "") for step in publish["steps"]]
+    stamp = next(index for index, run in enumerate(runs) if "sync-npm-version.cjs" in run)
+    assert runs[stamp + 1].strip() == "npm run build:js"
     assert "npm@11.5.1" in joined
     assert "refs/heads/main" in joined
     assert "refs/tags/npm-v" in joined

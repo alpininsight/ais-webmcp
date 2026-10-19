@@ -72,7 +72,9 @@ under `enterprise/`, a path containing `webmcp_check`, or a `.env` file fails
 the tarball guard.
 
 The committed npm version is the `0.0.0` placeholder. Publish stamps
-GitVersion's Major.Minor.Patch, the same version as the Python package.
+GitVersion's Major.Minor.Patch, the same version as the Python package, into
+`package.json`. `npm run build:js` then injects that version into the
+`InsightUiWebmcp` object in the built bundle.
 One-time npmjs.com setup (owner: Peter) and the publish rule are in
 [docs/release.md](docs/release.md).
 

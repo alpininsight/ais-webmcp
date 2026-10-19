@@ -7,15 +7,17 @@ npm token, `NODE_AUTH_TOKEN`, or any repository secret.
 
 ## Version
 
-The committed `package.json` version and the `version:"0.0.0"` marker in
-`src/ais_webmcp/assets/register.js` are placeholders. They are not a second
-version source.
+The committed `package.json` version is the `0.0.0` placeholder. It is not a
+second version source. `js/register.source.cjs` keeps that same placeholder.
+`scripts/build-js.cjs` replaces it in the built bundle with `package.json`'s
+version, so `InsightUiWebmcp.version` matches the npm package.
 
 On publish, the workflow reads GitVersion `major_minor_patch` — the same value
 `scripts/build_delivery.py` stamps into the Python package — and
 `scripts/sync-npm-version.cjs` writes that exact `MAJOR.MINOR.PATCH` into
-`package.json` and the runtime marker. `0.0.0` and pre-release versions are
-refused. A tag publish must be named `npm-vX.Y.Z` for that same version.
+`package.json`. The next step runs `npm run build:js`, which injects it into
+`register.js`. `0.0.0` and pre-release versions are refused. A tag publish
+must be named `npm-vX.Y.Z` for that same version.
 `npm-v*` is separate from the Python `v*` release tag so GitVersion does not
 treat the npm tag as its own version tag.
 
