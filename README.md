@@ -11,6 +11,33 @@ browser helper to your website's own content and actions.
 **DE:** Das frameworkunabhängige PyPI-Kommando, mit dem Sie WebMCP-Beschreibungen
 für jede Art von Webseite erstellen, prüfen und sinnvoll pflegen können.
 
+## Packages at a glance
+
+One browser runtime, `register.js`, is delivered three ways.
+
+```mermaid
+flowchart LR
+  Core["ais-webmcp (PyPI)<br/>manifest, CLI, register.js"]
+  Django["insight-ui-webmcp (PyPI)<br/>Django adapter"]
+  NPM["@alpininsightsolutions/webmcp (npm)<br/>register.js only"]
+  CDN["cdn.alpininsight.ai/ais-webmcp/vX.Y.Z/<br/>register.js"]
+  Core --> Django
+  Core --> NPM
+  Core --> CDN
+  Django --> S1["Django sites"]
+  NPM --> S2["other websites (bundlers)"]
+  CDN --> S3["script tag"]
+```
+
+- `ais-webmcp` on PyPI is the core: manifests, the CLI, and `register.js`.
+  The Django adapter `insight-ui-webmcp` installs that core.
+- `@alpininsightsolutions/webmcp` on npm is `register.js` only, for sites
+  that bundle it.
+- The CDN publishes `register.js` at `ais-webmcp/vX.Y.Z/` for a script tag.
+
+The npm package and the CDN path are pending their first release and are not
+live yet. The unscoped npm package `webmcp` is unrelated.
+
 ```bash
 pip install ais-webmcp
 ais-webmcp init --output manifest.yaml --static
@@ -33,14 +60,17 @@ explicitly enables and implements them.
 
 ## Output schemas
 
-Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12) for each tool result next to its input
-schema. The canonical key is `outputSchema`; `output_schema` is an alias, and
-only one of them may be set. `ToolSpec.output_schema` writes `outputSchema`.
+Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
+for each tool result next to its input schema. The canonical key is
+`outputSchema`; `output_schema` is an alias, and only one of them may be set.
+`ToolSpec.output_schema` writes `outputSchema`.
 
 `ais-webmcp validate` checks a present output schema: it must be a JSON object
-and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An invalid schema fails validation. Omitting
-the schema does not. The result stays `ok`, the exit code stays 0, and each
-tool without a schema adds a finding:
+and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An
+invalid schema fails validation. Omitting the schema does not. The result stays
+`ok`, the exit code stays 0, and each tool without a schema adds a finding:
+
+<!-- markdownlint-disable MD013 -->
 
 ```json
 {
@@ -50,6 +80,8 @@ tool without a schema adds a finding:
   "message": "missing outputSchema (also accepts output_schema). Optional for existing hosts; absence is a low-severity finding."
 }
 ```
+
+<!-- markdownlint-enable MD013 -->
 
 Check engines can treat `missing_output_schema` as a low-severity finding.
 Existing hosts keep validating until they declare output schemas. Text reports
@@ -71,12 +103,12 @@ and `NOTICE` (`package.json` is included because npm always packs it). A path
 under `enterprise/`, a path containing `webmcp_check`, or a `.env` file fails
 the tarball guard.
 
-| | |
-| --- | --- |
-| PyPI / CLI | `ais-webmcp` |
-| npm | `@alpininsightsolutions/webmcp` |
-| global | `InsightUiWebmcp` |
-| CDN path | `ais-webmcp/vX.Y.Z/` |
+|            |                                 |
+| ---------- | ------------------------------- |
+| PyPI / CLI | `ais-webmcp`                    |
+| npm        | `@alpininsightsolutions/webmcp` |
+| global     | `InsightUiWebmcp`               |
+| CDN path   | `ais-webmcp/vX.Y.Z/`            |
 
 ```bash
 npm install @alpininsightsolutions/webmcp

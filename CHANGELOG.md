@@ -4,6 +4,8 @@
 
 - Document `npm install @alpininsightsolutions/webmcp`, the
   `InsightUiWebmcp` import, and `window.InsightUiWebmcp` from a script tag.
+  The packages-at-a-glance diagram shows the same `register.js` runtime from
+  PyPI, npm, and the CDN. The npm package and CDN path are not live yet.
 - Publish npm releases from the GitHub-hosted runner `ubuntu-24.04`, in one
   concurrency group. `prepublishOnly` rejects the `0.0.0` placeholder.
   Trusted-publisher setup must allow direct `npm publish`.
