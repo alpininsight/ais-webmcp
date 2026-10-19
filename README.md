@@ -11,6 +11,45 @@ browser helper to your website's own content and actions.
 **DE:** Das frameworkunabhängige PyPI-Kommando, mit dem Sie WebMCP-Beschreibungen
 für jede Art von Webseite erstellen, prüfen und sinnvoll pflegen können.
 
+## Background
+
+[Insight UI](https://pypi.org/project/insight-ui/) is our open-source,
+WCAG-focused UI package, which we presented at the September meetup of the
+Berlin Python User Group, hosted at our office. Our work on WebMCP grew out
+of it as an extension, which is why we built insight-ui-webmcp first. At the
+meetup, people asked whether we could offer it without the Django layer we
+use for all our production-critical applications. That question is how
+ais-webmcp came about: the same WebMCP core, without the framework. We look
+forward to hearing what you think, and we warmly welcome contributions; see
+[how to contribute](CONTRIBUTING.md).
+
+## Packages at a glance
+
+One browser runtime, `register.js`, is delivered three ways.
+
+```mermaid
+flowchart LR
+  Core["ais-webmcp (PyPI)<br/>manifest, CLI, register.js"]
+  Django["insight-ui-webmcp (PyPI)<br/>Django adapter"]
+  NPM["@alpininsightsolutions/webmcp (npm)<br/>register.js only"]
+  CDN["cdn.alpininsight.ai/ais-webmcp/vX.Y.Z/<br/>register.js"]
+  Core --> Django
+  Core --> NPM
+  Core --> CDN
+  Django --> S1["Django sites"]
+  NPM --> S2["other websites (bundlers)"]
+  CDN --> S3["script tag"]
+```
+
+- `ais-webmcp` on PyPI is the core: manifests, the CLI, and `register.js`.
+  The Django adapter `insight-ui-webmcp` installs that core.
+- `@alpininsightsolutions/webmcp` (coming soon) on npm is `register.js` only,
+  for sites that bundle it.
+- The CDN publishes `register.js` at `ais-webmcp/vX.Y.Z/` for a script tag.
+
+The npm package and the CDN path are pending their first release and are not
+live yet. The unscoped npm package `webmcp` is unrelated.
+
 ```bash
 pip install ais-webmcp
 ais-webmcp init --output manifest.yaml --static
@@ -33,14 +72,17 @@ explicitly enables and implements them.
 
 ## Output schemas
 
-Declare a Draft 2020-12 JSON Schema for each tool result next to its input
-schema. The canonical key is `outputSchema`; `output_schema` is an alias, and
-only one of them may be set. `ToolSpec.output_schema` writes `outputSchema`.
+Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
+for each tool result next to its input schema. The canonical key is
+`outputSchema`; `output_schema` is an alias, and only one of them may be set.
+`ToolSpec.output_schema` writes `outputSchema`.
 
 `ais-webmcp validate` checks a present output schema: it must be a JSON object
-and a valid Draft 2020-12 schema. An invalid schema fails validation. Omitting
-the schema does not. The result stays `ok`, the exit code stays 0, and each
-tool without a schema adds a finding:
+and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An
+invalid schema fails validation. Omitting the schema does not. The result stays
+`ok`, the exit code stays 0, and each tool without a schema adds a finding:
+
+<!-- markdownlint-disable MD013 -->
 
 ```json
 {
@@ -51,16 +93,83 @@ tool without a schema adds a finding:
 }
 ```
 
+<!-- markdownlint-enable MD013 -->
+
 Check engines can treat `missing_output_schema` as a low-severity finding.
 Existing hosts keep validating until they declare output schemas. Text reports
 print `finding:` lines and still start with `ok:` when there are no errors.
 
-For Django and Insight UI applications, add the
-[insight-ui-webmcp adapter](https://github.com/alpininsight/insight-ui-webmcp).
-The core owns the shared schema and browser runtime; the adapter uses the
-installed core rather than shipping a second copy.
+For Django and [Insight UI](https://pypi.org/project/insight-ui/) applications,
+add the insight-ui-webmcp adapter. The core owns the shared schema and browser
+runtime; the adapter uses the installed core rather than shipping a second
+copy.
 
 Development preview; the first public PyPI/CDN release is pending.
+
+## Public npm package
+
+The browser runtime is prepared as the public package
+`@alpininsightsolutions/webmcp` (coming soon). Enterprise code never goes to
+npm. The tarball is only the built `register.js`, its types, this README,
+`LICENSE`, and `NOTICE` (`package.json` is included because npm always packs
+it). A path under `enterprise/`, a path containing `webmcp_check`, or a `.env`
+file fails the tarball guard.
+
+|            |                                 |
+| ---------- | ------------------------------- |
+| PyPI / CLI | `ais-webmcp`                    |
+| npm        | `@alpininsightsolutions/webmcp` |
+| global     | `InsightUiWebmcp`               |
+| CDN path   | `ais-webmcp/vX.Y.Z/`            |
+
+```bash
+npm install @alpininsightsolutions/webmcp
+```
+
+```ts
+import InsightUiWebmcp from "@alpininsightsolutions/webmcp";
+
+const status = InsightUiWebmcp.status();
+if (status.supported) {
+  await InsightUiWebmcp.registerFromManifest(
+    {
+      profile: "webpage",
+      version: "1",
+      tools: [
+        {
+          id: "search",
+          name: "Search",
+          description: "Search this page",
+          inputSchema: {
+            type: "object",
+            properties: { q: { type: "string" } },
+          },
+        },
+      ],
+    },
+    {
+      search(input: { q?: string }) {
+        return { results: [] };
+      },
+    },
+  );
+}
+```
+
+A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
+
+The committed npm version is the `0.0.0` placeholder. Publish stamps
+GitVersion's Major.Minor.Patch, the same version as the Python package, into
+`package.json`. `npm run build:js` then injects that version into the
+`InsightUiWebmcp` object in the built bundle. `prepublishOnly` rejects
+`npm publish` while the version is still `0.0.0`. Publishing runs from this
+repository: `.github/workflows/npm-publish.yml` calls the central reusable
+workflow in `alpininsight/.github-private`
+(`.github/workflows/npm-publish-reusable.yml`) with Trusted Publishing and
+provenance. The trusted publisher is bound to `alpininsight/ais-webmcp`,
+workflow `npm-publish.yml`, and environment `npm-ais-webmcp`. A release goes
+out only with Peter's go. The first publish is the manual bootstrap.
+One-time npmjs.com setup is in [docs/release.md](docs/release.md).
 
 ## Development
 
@@ -73,7 +182,12 @@ uv run --locked pytest
 uv run --locked pre-commit run --all-files
 ```
 
-Python 3.12–3.14 and Node 24 are checked in CI. Each release contains exactly
+See [how to contribute](CONTRIBUTING.md).
+
+Python 3.12–3.14 and Node 24 are checked in CI. Node 24 is the repo pin
+(`.nvmrc` and `devEngines`); the published package does not set `engines`,
+so installing the browser runtime does not warn on other Node versions.
+Each release contains exactly
 one wheel and one sdist. The browser runtime and schema publish under
 `https://cdn.alpininsight.ai/ais-webmcp/vX.Y.Z/` after PyPI readback.
 This namespace is a publication contract, not a claim that assets are live.
