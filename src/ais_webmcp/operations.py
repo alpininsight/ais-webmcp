@@ -296,6 +296,8 @@ def canonical_manifest(path: Path, *, extra_profiles=()):
             for alias in ("parameters", "input_schema"):
                 if alias in tool:
                     tool["inputSchema"] = tool.pop(alias)
+            if "output_schema" in tool:
+                tool["outputSchema"] = tool.pop("output_schema")
     return data, result
 
 

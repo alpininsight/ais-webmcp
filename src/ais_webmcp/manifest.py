@@ -26,6 +26,12 @@ class ToolSpec:
             unverified sources (WebMCP ``annotations.untrustedContentHint``,
             Chrome 149+). Emitted only when True; first-party page content
             stays unmarked.
+        output_schema: JSON Schema for the tool result. ``None`` omits
+            ``outputSchema``. Validation still succeeds and reports a
+            low-severity ``missing_output_schema`` finding. Pass a dict,
+            including ``{}``, to declare a schema. Prefer one for every tool
+            that returns structured data. Last so existing positional
+            constructors keep their meaning.
     """
 
     id: str
@@ -38,6 +44,7 @@ class ToolSpec:
     debugging: bool = False
     group: str | None = None
     untrusted_content: bool = False
+    output_schema: dict[str, Any] | None = None
 
     def to_dict(self, *, include_debugging: bool = False) -> dict[str, Any]:
         """Serialize to a manifest object that satisfies the shared schema.
@@ -56,6 +63,7 @@ class ToolSpec:
         debugging = payload.pop("debugging")
         group = payload.pop("group")
         untrusted_content = payload.pop("untrusted_content")
+        output_schema = payload.pop("output_schema")
         schema = (
             payload.pop("input_schema")
             or payload.pop("parameters")
@@ -66,6 +74,8 @@ class ToolSpec:
         )
         payload.pop("parameters", None)
         payload["inputSchema"] = schema
+        if output_schema is not None:
+            payload["outputSchema"] = output_schema
         if self.consequential:
             annotations: dict[str, Any] = {"readOnlyHint": False, "consequentialHint": True}
             payload["enabled"] = False

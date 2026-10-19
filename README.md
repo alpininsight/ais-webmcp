@@ -31,6 +31,30 @@ static snippet with no token. Existing files are protected unless you pass
 `--force`. Consequential tools stay disabled in scaffolds until the host
 explicitly enables and implements them.
 
+## Output schemas
+
+Declare a Draft 2020-12 JSON Schema for each tool result next to its input
+schema. The canonical key is `outputSchema`; `output_schema` is an alias, and
+only one of them may be set. `ToolSpec.output_schema` writes `outputSchema`.
+
+`ais-webmcp validate` checks a present output schema: it must be a JSON object
+and a valid Draft 2020-12 schema. An invalid schema fails validation. Omitting
+the schema does not. The result stays `ok`, the exit code stays 0, and each
+tool without a schema adds a finding:
+
+```json
+{
+  "path": "tools[0]",
+  "code": "missing_output_schema",
+  "severity": "low",
+  "message": "missing outputSchema (also accepts output_schema). Optional for existing hosts; absence is a low-severity finding."
+}
+```
+
+Check engines can treat `missing_output_schema` as a low-severity finding.
+Existing hosts keep validating until they declare output schemas. Text reports
+print `finding:` lines and still start with `ok:` when there are no errors.
+
 For Django and Insight UI applications, add the
 [insight-ui-webmcp adapter](https://github.com/alpininsight/insight-ui-webmcp).
 The core owns the shared schema and browser runtime; the adapter uses the

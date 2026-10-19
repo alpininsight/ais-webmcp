@@ -180,6 +180,22 @@ def test_cli_init_and_list_round_trip(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_mixed_list_keeps_output_schema_findings(tmp_path: Path) -> None:
+    """A valid file listed beside an invalid one still exposes low findings."""
+    good = tmp_path / "good.json"
+    tool = json.loads(VALID_JSON.read_text(encoding="utf-8"))
+    tool["tools"] = [tool["tools"][0]]
+    good.write_text(json.dumps(tool), encoding="utf-8")
+    listed = _run("list", "--format", "json", str(good), str(INVALID))
+    assert listed.returncode == 1, listed.stderr + listed.stdout
+    payload = json.loads(listed.stdout)
+    assert payload[0]["ok"] is True
+    assert payload[0]["findings"][0]["code"] == "missing_output_schema"
+    assert payload[0]["findings"][0]["severity"] == "low"
+    assert payload[1]["ok"] is False
+
+
+@pytest.mark.unit
 def test_list_fixture_and_invalid_exits() -> None:
     ok = _run("list", str(VALID_JSON), "--format", "json")
     assert ok.returncode == 0, ok.stderr + ok.stdout
