@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Create the reviewed main GitHub release for the private Core PyPI publisher (requires the activation variable)
+        description: Create the protected main GitHub release for the private Core PyPI publisher (requires the activation variable)
         type: boolean
         default: false
       cdn:
@@ -35,7 +35,6 @@ jobs:
     permissions:
       contents: read
       checks: read
-      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

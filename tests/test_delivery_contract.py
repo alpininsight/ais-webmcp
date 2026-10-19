@@ -40,43 +40,45 @@ def test_ci_uses_central_repository_policy():
 
 
 @pytest.mark.parametrize(
-    "protected,head,check,approved",
+    "protected,head,check",
     [
-        (False, "a" * 40, "success", True),
-        (True, "b" * 40, "success", True),
-        (True, "a" * 40, "failure", True),
-        (True, "a" * 40, "success", False),
+        (False, "a" * 40, "success"),
+        (True, "b" * 40, "success"),
+        (True, "a" * 40, "failure"),
     ],
 )
-def test_publication_requires_source_check_and_review(
-    monkeypatch, protected, head, check, approved
-):
+def test_publication_requires_protected_source_and_check(monkeypatch, protected, head, check):
     def api(path):
         if path.endswith("branches/main"):
             return {"protected": protected, "commit": {"sha": head}}
-        if "check-runs" in path:
-            return {"check_runs": [{"id": 1, "name": "WebMCP Quality Gate", "conclusion": check}]}
-        if "/reviews" in path:
-            return [
-                {
-                    "user": {"login": "reviewer"},
-                    "state": "APPROVED" if approved else "CHANGES_REQUESTED",
-                    "commit_id": "c" * 40,
-                }
-            ]
-        return [
-            {
-                "merged_at": "now",
-                "base": {"ref": "main"},
-                "head": {"sha": "c" * 40},
-                "user": {"login": "author"},
-                "number": 1,
-            }
-        ]
+        return {"check_runs": [{"id": 1, "name": "WebMCP Quality Gate", "conclusion": check}]}
 
     monkeypatch.setattr(publication, "api", api)
     with pytest.raises(ValueError):
         publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
+
+
+def test_publication_needs_no_pr_review(monkeypatch):
+    """Owner decision 2026-10-12: approval lives in the pypi-<project> environment."""
+    calls = []
+
+    def api(path):
+        calls.append(path)
+        if path.endswith("branches/main"):
+            return {"protected": True, "commit": {"sha": "a" * 40}}
+        if "check-runs" in path:
+            return {
+                "check_runs": [{"id": 1, "name": "WebMCP Quality Gate", "conclusion": "success"}]
+            }
+        raise AssertionError(f"unexpected API call {path}")
+
+    monkeypatch.setattr(publication, "api", api)
+    publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
+    assert any(path.endswith("branches/main") for path in calls)
+    assert any("check-runs" in path for path in calls)
+    assert not any("/reviews" in path or "/pulls" in path for path in calls)
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    assert "pull-requests" not in release["jobs"]["source"]["permissions"]
 
 
 def test_npm_publish_runs_in_this_repository():
