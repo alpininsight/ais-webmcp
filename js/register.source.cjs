@@ -12,6 +12,9 @@
  *   cancel execution only via the execute AbortSignal (see issue #8).
  * - Tool payload uses `name` (id) + optional `title` (human label) and
  *   `annotations.*Hint` — never a top-level `consequential` boolean.
+ * - `outputSchema` (alias `output_schema`) is optional. When set it must be
+ *   one JSON Schema object and is copied onto the registered tool. Omission
+ *   still registers; manifest validation reports that as a low finding.
  * - Tool lifecycle events `toolactivated` / `toolcancel` (handler properties
  *   `ontoolactivated` / `ontoolcancel`) fire on `document.modelContext`
  *   (Chrome 156+ / WebMCP PR #245). Helpers `onToolActivated` / `onToolCancel`
@@ -350,14 +353,21 @@
   }
 
   var validators = require("./schema-validator.cjs");
+  function validJsonSchemaObject(schema) {
+    if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+      return false;
+    }
+    // A circular schema makes the meta-schema walker throw RangeError.
+    // That is an invalid schema, not an uncaught rejection.
+    try {
+      return !!validators.validateInputSchema(schema);
+    } catch (_err) {
+      return false;
+    }
+  }
+
   function validInputSchema(schema) {
-    return !!(
-      schema &&
-      typeof schema === "object" &&
-      !Array.isArray(schema) &&
-      schema.type === "object" &&
-      validators.validateInputSchema(schema)
-    );
+    return !!(validJsonSchemaObject(schema) && schema.type === "object");
   }
 
   /**
@@ -411,6 +421,24 @@
       return {
         ok: false,
         error: "exactly one valid object input schema is required",
+      };
+    }
+    var outputKeys = ["outputSchema", "output_schema"].filter(function (key) {
+      return spec[key] !== undefined;
+    });
+    if (outputKeys.length > 1) {
+      return {
+        ok: false,
+        error: "at most one of outputSchema or output_schema",
+      };
+    }
+    if (
+      outputKeys.length === 1 &&
+      !validJsonSchemaObject(spec[outputKeys[0]])
+    ) {
+      return {
+        ok: false,
+        error: "output schema must be a valid JSON Schema object",
       };
     }
     var hints = spec.annotations || {};
@@ -491,6 +519,9 @@
     var inputSchema = spec.inputSchema || spec.parameters || spec.input_schema;
     if (inputSchema && typeof inputSchema === "object") {
       tool.inputSchema = inputSchema;
+    }
+    if (outputKeys.length === 1) {
+      tool.outputSchema = spec[outputKeys[0]];
     }
 
     var annotations = buildAnnotations(spec);

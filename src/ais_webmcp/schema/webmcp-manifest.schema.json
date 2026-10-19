@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:insight-ui-webmcp:webmcp-manifest:1",
   "title": "WebMCP tool manifest",
-  "description": "Single source of truth for a WebMCP host manifest, shared by Django profiles and static pages. The canonical parameter object is inputSchema; parameters and input_schema are accepted aliases but only one may be set. register.js accepts all three keys and requires exactly one. annotations.debugging marks a tool that is itself for DevTools/inspection (issue #9). It is allowed only when the host sets it explicitly; prepare never copies Django DEBUG or JS_DEBUG into annotations. Optional tool.group names the molecule for Atomic Design listing (issue #20); doctor --tree prints atom → molecule → organism. A consequential tool must set enabled explicitly (true or false). subscribe_newsletter and other subscribe_* tools stay consequential and ship enabled false unless the host opts in (issue #3). Unregister is AbortController / { signal } on registerTool, not unregisterTool (issue #11). This schema does not execute tools and is not a live-page CRUD API.",
+  "description": "Single source of truth for a WebMCP host manifest, shared by Django profiles and static pages. The canonical parameter object is inputSchema; parameters and input_schema are accepted aliases but only one may be set. register.js accepts all three keys and requires exactly one. Optional tool outputSchema (alias output_schema) is a Draft 2020-12 JSON Schema for the tool result; at most one of those keys may be set. Omitting it stays valid. ais-webmcp validate then reports a low-severity finding with code missing_output_schema so callers can flag it without failing existing hosts. annotations.debugging marks a tool that is itself for DevTools/inspection (issue #9). It is allowed only when the host sets it explicitly; prepare never copies Django DEBUG or JS_DEBUG into annotations. Optional tool.group names the molecule for Atomic Design listing (issue #20); doctor --tree prints atom → molecule → organism. A consequential tool must set enabled explicitly (true or false). subscribe_newsletter and other subscribe_* tools stay consequential and ship enabled false unless the host opts in (issue #3). Unregister is AbortController / { signal } on registerTool, not unregisterTool (issue #11). This schema does not execute tools and is not a live-page CRUD API.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -85,6 +85,14 @@
         "input_schema": {
           "$ref": "#/$defs/inputSchema"
         },
+        "outputSchema": {
+          "$ref": "#/$defs/outputSchema",
+          "description": "Draft 2020-12 JSON Schema for the tool result. Recommended. Omission is valid and is reported as finding code missing_output_schema at severity low."
+        },
+        "output_schema": {
+          "$ref": "#/$defs/outputSchema",
+          "description": "Alias of outputSchema. Do not set both."
+        },
         "consequential": {
           "type": "boolean",
           "description": "Side-effecting tool. Defaults to false when omitted. Does not by itself enable the tool."
@@ -105,6 +113,9 @@
       "allOf": [
         {
           "$ref": "#/$defs/oneSchemaKey"
+        },
+        {
+          "$ref": "#/$defs/oneOutputSchemaKey"
         },
         {
           "if": {
@@ -143,6 +154,37 @@
     },
     "inputSchema": {
       "type": "object"
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "Draft 2020-12 JSON Schema object describing the tool result. Boolean schemas are not accepted."
+    },
+    "oneOutputSchemaKey": {
+      "description": "Zero or one of outputSchema, output_schema. Omission is valid.",
+      "oneOf": [
+        {
+          "properties": {
+            "outputSchema": false,
+            "output_schema": false
+          }
+        },
+        {
+          "required": [
+            "outputSchema"
+          ],
+          "properties": {
+            "output_schema": false
+          }
+        },
+        {
+          "required": [
+            "output_schema"
+          ],
+          "properties": {
+            "outputSchema": false
+          }
+        }
+      ]
     },
     "oneSchemaKey": {
       "description": "Exactly one of inputSchema, parameters, input_schema.",
