@@ -11,6 +11,18 @@ browser helper to your website's own content and actions.
 **DE:** Das frameworkunabhängige PyPI-Kommando, mit dem Sie WebMCP-Beschreibungen
 für jede Art von Webseite erstellen, prüfen und sinnvoll pflegen können.
 
+## Background
+
+[Insight UI](https://pypi.org/project/insight-ui/) is our open-source,
+WCAG-focused UI package, which we presented at the September meetup of the
+Berlin Python User Group, hosted at our office. Our work on WebMCP grew out
+of it as an extension, which is why we built insight-ui-webmcp first. At the
+meetup, people asked whether we could offer it without the Django layer we
+use for all our production-critical applications. That question is how
+ais-webmcp came about: the same WebMCP core, without the framework. We look
+forward to hearing what you think, and we warmly welcome contributions; see
+[how to contribute](CONTRIBUTING.md).
+
 ## Packages at a glance
 
 One browser runtime, `register.js`, is delivered three ways.
@@ -31,8 +43,8 @@ flowchart LR
 
 - `ais-webmcp` on PyPI is the core: manifests, the CLI, and `register.js`.
   The Django adapter `insight-ui-webmcp` installs that core.
-- `@alpininsightsolutions/webmcp` on npm is `register.js` only, for sites
-  that bundle it.
+- `@alpininsightsolutions/webmcp` (coming soon) on npm is `register.js` only,
+  for sites that bundle it.
 - The CDN publishes `register.js` at `ais-webmcp/vX.Y.Z/` for a script tag.
 
 The npm package and the CDN path are pending their first release and are not
@@ -87,21 +99,21 @@ Check engines can treat `missing_output_schema` as a low-severity finding.
 Existing hosts keep validating until they declare output schemas. Text reports
 print `finding:` lines and still start with `ok:` when there are no errors.
 
-For Django and Insight UI applications, add the
-[insight-ui-webmcp adapter](https://github.com/alpininsight/insight-ui-webmcp).
-The core owns the shared schema and browser runtime; the adapter uses the
-installed core rather than shipping a second copy.
+For Django and [Insight UI](https://pypi.org/project/insight-ui/) applications,
+add the insight-ui-webmcp adapter. The core owns the shared schema and browser
+runtime; the adapter uses the installed core rather than shipping a second
+copy.
 
 Development preview; the first public PyPI/CDN release is pending.
 
 ## Public npm package
 
 The browser runtime is prepared as the public package
-`@alpininsightsolutions/webmcp`. Enterprise code never goes to npm. The
-tarball is only the built `register.js`, its types, this README, `LICENSE`,
-and `NOTICE` (`package.json` is included because npm always packs it). A path
-under `enterprise/`, a path containing `webmcp_check`, or a `.env` file fails
-the tarball guard.
+`@alpininsightsolutions/webmcp` (coming soon). Enterprise code never goes to
+npm. The tarball is only the built `register.js`, its types, this README,
+`LICENSE`, and `NOTICE` (`package.json` is included because npm always packs
+it). A path under `enterprise/`, a path containing `webmcp_check`, or a `.env`
+file fails the tarball guard.
 
 |            |                                 |
 | ---------- | ------------------------------- |
@@ -167,6 +179,8 @@ npm test
 uv run --locked pytest
 uv run --locked pre-commit run --all-files
 ```
+
+See [how to contribute](CONTRIBUTING.md).
 
 Python 3.12–3.14 and Node 24 are checked in CI. Node 24 is the repo pin
 (`.nvmrc` and `devEngines`); the published package does not set `engines`,
