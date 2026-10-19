@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pin Node 24 for repository development with `.nvmrc` and `devEngines`.
+  The published package does not set `engines`.
 - Inject `package.json`'s version into `InsightUiWebmcp.version` when
   building `register.js`. Publish syncs that version from the Python package
   before the build.

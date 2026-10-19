@@ -89,7 +89,10 @@ uv run --locked pytest
 uv run --locked pre-commit run --all-files
 ```
 
-Python 3.12–3.14 and Node 24 are checked in CI. Each release contains exactly
+Python 3.12–3.14 and Node 24 are checked in CI. Node 24 is the repo pin
+(`.nvmrc` and `devEngines`); the published package does not set `engines`,
+so installing the browser runtime does not warn on other Node versions.
+Each release contains exactly
 one wheel and one sdist. The browser runtime and schema publish under
 `https://cdn.alpininsight.ai/ais-webmcp/vX.Y.Z/` after PyPI readback.
 This namespace is a publication contract, not a claim that assets are live.

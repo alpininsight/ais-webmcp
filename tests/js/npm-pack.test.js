@@ -39,6 +39,11 @@ test("package metadata is the public scoped runtime", () => {
     "LICENSE",
     "NOTICE",
   ]);
+  assert.equal(manifest.engines, undefined);
+  assert.deepEqual(manifest.devEngines, {
+    runtime: { name: "node", version: ">=24 <25", onFail: "error" },
+  });
+  assert.equal(fs.readFileSync(path.join(ROOT, ".nvmrc"), "utf8").trim(), "24");
 });
 
 test("packed files must match the allowlist", () => {

@@ -55,3 +55,8 @@ tarball guard (`scripts/check-npm-pack.cjs`, CI job `npm-pack`) runs
 
 Python sources, tests, schemas, delivery scripts, and anything under an
 enterprise tree stay in the repository. They are not part of the npm package.
+
+The published `package.json` does not set `engines`. Node 24 is the
+repository pin (`.nvmrc` and `devEngines`). `devEngines` applies when
+someone works in this source tree; installing the browser runtime does not
+warn on other Node versions.
