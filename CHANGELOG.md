@@ -6,9 +6,11 @@
   `InsightUiWebmcp` import, and `window.InsightUiWebmcp` from a script tag.
   The packages-at-a-glance diagram shows the same `register.js` runtime from
   PyPI, npm, and the CDN. The npm package and CDN path are not live yet.
-- Publish npm releases from the GitHub-hosted runner `ubuntu-24.04`, in one
-  concurrency group. `prepublishOnly` rejects the `0.0.0` placeholder.
-  Trusted-publisher setup must allow direct `npm publish`.
+- Publish npm releases from the central publisher in
+  `alpininsight/.github-private`
+  (`.github/workflows/ais-webmcp-publish-npm.yml`, environment
+  `npm-ais-webmcp`) with Trusted Publishing and provenance, and only with
+  Peter's go. `prepublishOnly` rejects the `0.0.0` placeholder.
 - Type the browser runtime as one CommonJS export. Tool specs accept named
   interfaces, either `id` or `name`, and exactly one input-schema alias whose
   `type` is `"object"`. At most one of `outputSchema` or `output_schema` is
@@ -23,8 +25,8 @@
 - Prepare the public npm package `@alpininsightsolutions/webmcp` for the
   browser runtime. The tarball allowlist is the built bundle, its types,
   README, LICENSE, and NOTICE. Enterprise paths, `webmcp_check`, and `.env`
-  files fail the pack guard. Publish uses Trusted Publishing from an `npm-v*`
-  tag on main and does not store an npm token.
+  files fail the pack guard. CI job `npm-pack` runs that guard. This
+  repository does not publish the package.
 - Accept an optional Draft 2020-12 `outputSchema` (alias `output_schema`) on
   each tool. A present schema is validated; a missing one stays valid and is
   reported as finding code `missing_output_schema` at severity `low`.

@@ -150,11 +150,12 @@ The committed npm version is the `0.0.0` placeholder. Publish stamps
 GitVersion's Major.Minor.Patch, the same version as the Python package, into
 `package.json`. `npm run build:js` then injects that version into the
 `InsightUiWebmcp` object in the built bundle. `prepublishOnly` rejects
-`npm publish` while the version is still `0.0.0`. The publish job uses the
-GitHub-hosted runner `ubuntu-24.04` because npm Trusted Publishing does not
-accept self-hosted runners.
-One-time npmjs.com setup (owner: Peter) and the publish rule are in
-[docs/release.md](docs/release.md).
+`npm publish` while the version is still `0.0.0`. Releases are published by
+the central publisher in `alpininsight/.github-private`
+(`.github/workflows/ais-webmcp-publish-npm.yml`, environment
+`npm-ais-webmcp`) with Trusted Publishing and provenance, and only with
+Peter's go. This repository does not run `npm publish`.
+One-time npmjs.com setup is in [docs/release.md](docs/release.md).
 
 ## Development
 

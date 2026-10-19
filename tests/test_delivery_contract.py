@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,7 @@ def test_ci_uses_central_repository_policy():
         for name, body in callers.items()
         if any("runs-on" in job for job in body["jobs"].values())
     ]
-    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml"}
+    assert set(local_runs) <= {"ci.yml", "release.yml"}
 
 
 @pytest.mark.parametrize(
@@ -78,60 +79,35 @@ def test_publication_requires_source_check_and_review(
         publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
 
 
-def test_npm_publish_is_trusted_publishing_without_tokens():
-    """npm Trusted Publishing is OIDC on npm-release. No token, no secret."""
-    text = (ROOT / ".github/workflows/npm-publish.yml").read_text()
-    assert "secrets." not in text
-    assert text.count("NODE_AUTH_TOKEN") == 1
-    assert text.count("NPM_TOKEN") == 1
-    assert 'test -z "${NODE_AUTH_TOKEN:-}"' in text
-    assert 'test -z "${NPM_TOKEN:-}"' in text
-    workflow = yaml.safe_load(text)
-    triggers = workflow.get("on", workflow.get(True))
-    assert set(triggers) == {"push", "workflow_dispatch"}
-    assert triggers["push"] == {"tags": ["npm-v*"]}
-    assert workflow["permissions"] == {"contents": "read"}
-    version = workflow["jobs"]["version"]
-    assert version["uses"].endswith("/gitversion-reusable.yml@main")
-    assert version["with"]["checkout_ref"] == "${{ github.sha }}"
-    publish = workflow["jobs"]["publish"]
-    assert publish["environment"] == "npm-release"
-    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
-    assert workflow["concurrency"] == {
-        "group": "webmcp-npm-publish",
-        "cancel-in-progress": False,
-    }
-    assert publish["runs-on"] == "ubuntu-24.04"
-    assert "secrets" not in publish
-    joined = "\n".join(step.get("run", "") for step in publish["steps"])
-    assert "npm run check:js-build" in joined
-    assert "npm test" in joined
-    assert "scripts/check-npm-pack.cjs" in joined
-    assert "scripts/sync-npm-version.cjs" in joined
-    assert "npm run build:js" in joined
-    assert "npm publish --provenance --access public" in joined
-    runs = [step.get("run", "") for step in publish["steps"]]
-    stamp = next(index for index, run in enumerate(runs) if "sync-npm-version.cjs" in run)
-    assert runs[stamp + 1].strip() == "npm run build:js"
-    assert "npm@11.5.1" in joined
-    assert "refs/heads/main" in joined
-    assert "refs/tags/npm-v" in joined
-    node = next(
-        step
-        for step in publish["steps"]
-        if str(step.get("uses", "")).startswith("actions/setup-node@")
-    )
-    assert node["uses"].startswith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
-    assert node["with"]["node-version"] == "24"
-    assert "registry-url" not in node["with"]
-    checkout = next(
-        step
-        for step in publish["steps"]
-        if str(step.get("uses", "")).startswith("actions/checkout@")
-    )
-    assert checkout["uses"].startswith("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
-    assert checkout["with"]["persist-credentials"] is False
-    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+def test_npm_publish_stays_in_the_central_publisher():
+    """npm Trusted Publishing lives in .github-private. This repo guards the tarball."""
+    workflows = ROOT / ".github/workflows"
+    assert not (workflows / "npm-publish.yml").exists()
+    workflow_text = "\n".join(path.read_text() for path in sorted(workflows.glob("*.yml")))
+    assert "npm-release" not in workflow_text
+    assert "npm-v" not in workflow_text
+    assert "npm publish" not in workflow_text
+
+    package = json.loads((ROOT / "package.json").read_text())
+    assert package["name"] == "@alpininsightsolutions/webmcp"
+    assert (ROOT / "scripts/check-npm-pack.cjs").is_file()
+    assert (ROOT / "scripts/sync-npm-version.cjs").is_file()
+    assert (ROOT / "src/ais_webmcp/assets/register.d.ts").is_file()
+
+    readme = (ROOT / "README.md").read_text()
+    release_doc = (ROOT / "docs/release.md").read_text()
+    for text in (readme, release_doc):
+        assert "ais-webmcp-publish-npm.yml" in text
+        assert "npm-ais-webmcp" in text
+        assert ".github-private" in text
+        assert "Peter's go" in text
+        assert "Trusted Publishing" in text
+        assert "provenance" in text
+        assert "npm-release" not in text
+        assert "npm-publish.yml" not in text
+        assert re.search(r"npm-v(?!ersion)", text) is None
+
+    ci = yaml.safe_load((workflows / "ci.yml").read_text())
     guard = ci["jobs"]["npm-pack"]
     assert "scripts/check-npm-pack.cjs" in guard["steps"][-1]["run"]
     assert "npm-pack" in ci["jobs"]["gate"]["needs"]
