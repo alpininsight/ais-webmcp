@@ -74,7 +74,11 @@ def test_publication_needs_no_pr_review(monkeypatch):
 
     monkeypatch.setattr(publication, "api", api)
     publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
-    assert not any("/reviews" in c or "/pulls" in c for c in calls)
+    assert any(path.endswith("branches/main") for path in calls)
+    assert any("check-runs" in path for path in calls)
+    assert not any("/reviews" in path or "/pulls" in path for path in calls)
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    assert "pull-requests" not in release["jobs"]["source"]["permissions"]
 
 
 def test_npm_publish_runs_in_this_repository():
