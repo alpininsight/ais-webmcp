@@ -70,9 +70,6 @@ declare namespace InsightUiWebmcp {
     description: string;
     execute: WebmcpExecute;
     title?: string;
-    inputSchema?: object;
-    parameters?: object;
-    input_schema?: object;
     outputSchema?: object;
     output_schema?: object;
     consequential?: boolean;
@@ -81,18 +78,37 @@ declare namespace InsightUiWebmcp {
     annotations?: WebmcpAnnotations;
   }
 
+  /**
+   * The runtime registers a tool only when exactly one input-schema alias
+   * is set.
+   */
+  type WebmcpInputSchema =
+    | {
+        inputSchema: object;
+        parameters?: never;
+        input_schema?: never;
+      }
+    | {
+        parameters: object;
+        inputSchema?: never;
+        input_schema?: never;
+      }
+    | {
+        input_schema: object;
+        inputSchema?: never;
+        parameters?: never;
+      };
+
   /** The runtime uses `id` when it is set, and otherwise `name`. */
   type WebmcpToolSpec = WebmcpToolFields &
+    WebmcpInputSchema &
     ({ id: string; name?: string } | { name: string; id?: string });
 
-  interface WebmcpManifestTool {
+  interface WebmcpManifestToolFields {
     name: string;
     description: string;
     id?: string;
     title?: string;
-    inputSchema?: object;
-    parameters?: object;
-    input_schema?: object;
     outputSchema?: object;
     output_schema?: object;
     consequential?: boolean;
@@ -100,6 +116,8 @@ declare namespace InsightUiWebmcp {
     group?: string;
     annotations?: WebmcpAnnotations;
   }
+
+  type WebmcpManifestTool = WebmcpManifestToolFields & WebmcpInputSchema;
 
   /** Top-level fields accepted by the manifest schema. */
   interface WebmcpManifest {

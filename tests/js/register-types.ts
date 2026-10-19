@@ -85,6 +85,35 @@ async function useRuntime(): Promise<void> {
   const badHandlers: BadHandlers = { search: "nope" };
   // @ts-expect-error handler properties must be execute functions
   await api.registerFromManifest(manifest, badHandlers);
+  // @ts-expect-error exactly one input schema alias is required
+  await api.registerTool({
+    id: "a_tool",
+    description: "missing schema",
+    execute() {
+      return { ok: true };
+    },
+  });
+  // @ts-expect-error input schema aliases are exclusive
+  await api.registerTool({
+    name: "a_tool",
+    description: "two schemas",
+    inputSchema: { type: "object" },
+    parameters: { type: "object" },
+    execute() {
+      return { ok: true };
+    },
+  });
+  await api.registerFromManifest({
+    profile: "webpage",
+    version: "1",
+    tools: [
+      {
+        name: "Search",
+        description: "Search",
+        parameters: { type: "object" },
+      },
+    ],
+  });
   const failure = batch.errors[0];
   if (failure) {
     // @ts-expect-error manifest-level errors do not include ok
