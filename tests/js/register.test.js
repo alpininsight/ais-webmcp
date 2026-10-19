@@ -914,6 +914,124 @@ describe("InsightUiWebmcp registerTool contract", () => {
     );
   });
 
+  it("forwards outputSchema and the output_schema alias", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const outputSchema = {
+      type: "object",
+      properties: { sections: { type: "array", items: { type: "string" } } },
+    };
+    const result = await api.registerTool({
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => ({ sections: [] }),
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(ctx.registerCalls[0].tool.outputSchema, outputSchema);
+
+    const alias = await api.registerTool({
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      output_schema: { type: "string" },
+      execute: async () => "ok",
+    });
+    assert.equal(alias.ok, true);
+    assert.deepEqual(ctx.registerCalls[1].tool.outputSchema, { type: "string" });
+  });
+
+  it("registers a tool that omits outputSchema", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      execute: async () => [],
+    });
+    assert.equal(result.ok, true);
+    assert.equal("outputSchema" in ctx.registerCalls[0].tool, false);
+  });
+
+  it("returns ok false for a circular output schema", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const outputSchema = { type: "object" };
+    outputSchema.properties = { self: outputSchema };
+    const result = await api.registerTool({
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => ({}),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /output schema/i);
+    assert.equal(ctx.registerCalls.length, 0);
+  });
+
+  it("rejects an invalid or ambiguous output schema", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const base = {
+      id: "list_sections",
+      description: "List sections",
+      inputSchema: { type: "object", properties: {} },
+      execute: async () => ({}),
+    };
+    const invalid = await api.registerTool({
+      ...base,
+      outputSchema: { type: "object", required: "nope" },
+    });
+    assert.equal(invalid.ok, false);
+    assert.match(invalid.error, /output schema/i);
+
+    const arraySchema = await api.registerTool({ ...base, outputSchema: [] });
+    assert.equal(arraySchema.ok, false);
+    assert.match(arraySchema.error, /output schema/i);
+
+    const both = await api.registerTool({
+      ...base,
+      outputSchema: { type: "object" },
+      output_schema: { type: "string" },
+    });
+    assert.equal(both.ok, false);
+    assert.match(both.error, /outputSchema/);
+    assert.equal(ctx.registerCalls.length, 0);
+  });
+
+  it("registerFromManifest copies outputSchema onto the registered tool", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const summary = await api.registerFromManifest(
+      {
+        profile: "webpage",
+        version: "1",
+        tools: [
+          {
+            id: "probe",
+            name: "Probe",
+            description: "Contract probe",
+            inputSchema: {
+              type: "object",
+              properties: { value: { type: "string" } },
+            },
+            outputSchema: {
+              type: "object",
+              properties: { ok: { type: "boolean" } },
+            },
+          },
+        ],
+      },
+      { probe: async () => ({ ok: true }) },
+    );
+    assert.equal(summary.registered, 1);
+    assert.equal(summary.errors.length, 0);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema.properties.ok.type, "boolean");
+  });
+
   it("rejects an invalid tool id", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

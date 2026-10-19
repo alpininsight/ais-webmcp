@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": false,
+    "noEmit": true,
+    "types": [],
+    "lib": ["es2022", "dom"],
+    "esModuleInterop": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@alpininsightsolutions/webmcp": ["src/ais_webmcp/assets/register.d.ts"]
+    }
+  },
+  "files": ["register-types.ts"]
+}

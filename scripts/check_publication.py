@@ -1,6 +1,6 @@
 """Read-only release gates; PyPI uploads run in the private per-package publishers.
 
-The GitHub release and the CDN need the reviewed main source; the CDN also
+The GitHub release and the CDN need the protected main source with a green gate; the CDN also
 needs its own PyPI project to carry exactly this reproducible build.
 """
 
@@ -34,23 +34,9 @@ def check_source(repository, revision):
     gates = sorted((c for c in checks if c["name"] == "WebMCP Quality Gate"), key=lambda c: c["id"])
     if not gates or gates[-1]["conclusion"] != "success":
         raise ValueError("latest exact-source WebMCP Quality Gate must succeed")
-    approved = False
-    for pull in api(f"repos/{repository}/commits/{revision}/pulls?per_page=100"):
-        if not pull.get("merged_at") or pull["base"]["ref"] != "main":
-            continue
-        reviews = api(f"repos/{repository}/pulls/{pull['number']}/reviews?per_page=100")
-        latest = {}
-        for review in reviews:
-            if review["state"] in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
-                latest[review["user"]["login"]] = review
-        approved |= any(
-            r["state"] == "APPROVED"
-            and r["commit_id"] == pull["head"]["sha"]
-            and user != pull["user"]["login"]
-            for user, r in latest.items()
-        )
-    if not approved:
-        raise ValueError("merged main promotion requires independent approval on its exact PR head")
+    # Owner decision 2026-10-12: release approval is the protected pypi-<project>
+    # environment in .github-private (required reviewer, main only), enforced by
+    # the central publisher. No independent PR review is required here.
 
 
 def verify_bundle(bundle, revision, version):

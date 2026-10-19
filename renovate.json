@@ -1,0 +1,97 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Run self-hosted from alpininsight/.github-private (renovate.yml, docs/runbooks/self-hosted-renovate.md). Updates land on develop; develop to main stays a manual promotion.",
+  "extends": [
+    "config:recommended"
+  ],
+  "baseBranchPatterns": [
+    "develop"
+  ],
+  "branchPrefix": "chore/renovate-",
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "timezone": "Europe/Berlin",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "platformAutomerge": false,
+  "rebaseWhen": "behind-base-branch",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "Security fixes are proposed at once, outside the weekly schedule and without the release-age wait.",
+    "labels": [
+      "dependencies",
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": null
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Minor, patch, digest and pin updates arrive as one weekly PR. Majors stay separate PRs for review.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "non-major dependencies",
+      "groupSlug": "non-major"
+    },
+    {
+      "description": "npm and PyPI releases are proposed after three days, so a release that is withdrawn again never reaches a PR. Security fixes are exempt (vulnerabilityAlerts).",
+      "matchDatasources": [
+        "npm",
+        "pypi"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Reusable workflows and actions from alpininsight/.github-private are adopted through its release and consumer canary, not by Renovate.",
+      "matchPackageNames": [
+        "alpininsight/.github-private"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "WebMCP host pins (ais-webmcp, insight-ui-webmcp, insight-ui) move with the release order in the open-core standard, not with Renovate.",
+      "matchPackageNames": [
+        "ais-webmcp",
+        "insight-ui-webmcp",
+        "insight-ui",
+        "/^https://github\\.com/alpininsight//",
+        "/alpininsight/(ais-webmcp|insight-ui-webmcp|insight-ui)(\\.git)?$/"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Renovate looks .python-version up on Docker Hub; the Python line follows the CI matrix instead.",
+      "matchManagers": [
+        "pyenv"
+      ],
+      "enabled": false
+    },
+    {
+      "description": ".github/workflows/npm-publish.yml must stay byte-identical to templates/npm/npm-publish.yml in alpininsight/.github-private; its pins move there first.",
+      "matchFileNames": [
+        ".github/workflows/npm-publish.yml"
+      ],
+      "enabled": false
+    }
+  ]
+}
