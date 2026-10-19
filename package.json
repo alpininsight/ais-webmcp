@@ -39,9 +39,11 @@
   },
   "scripts": {
     "build:js": "node scripts/build-js.cjs",
+    "build:release": "npm run build:js",
     "check:js-build": "node scripts/build-js.cjs --check",
     "test": "node --test tests/js/*.test.js && tsc -p tests/js/tsconfig.json",
     "prepublishOnly": "node scripts/assert-npm-release-version.cjs",
+    "check:pack": "node scripts/check-npm-pack.cjs",
     "check:npm-pack": "node scripts/check-npm-pack.cjs",
     "sync:npm-version": "node scripts/sync-npm-version.cjs"
   },

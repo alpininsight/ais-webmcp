@@ -1,27 +1,164 @@
-name: npm publish
-# Thin caller. Publish logic is alpininsight/.github-private
-# .github/workflows/npm-publish-reusable.yml (.github-private#730).
-# Trusted publisher: repository ais-webmcp, this filename, environment
-# npm-ais-webmcp. No npm token. The first publish is a manual bootstrap.
+name: npm publication
+
+# Publish this repository's package to the public npm registry.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish
+        description: Release tag vX.Y.Z
         required: true
         type: string
+
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.repository }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
   publish:
+    name: Publish to npm
     if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      id-token: write
-    # TODO(.github-private#730): confirm these input names if the merged
-    # contract differs. A caller job cannot set environment.
-    uses: alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main
-    with:
-      tag: ${{ inputs.tag }}
-      environment: npm-ais-webmcp
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-${{ github.event.repository.name }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a stable tag on main
+        env:
+          SOURCE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$SOURCE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$(git rev-parse "refs/tags/${SOURCE_TAG}^{commit}")" == "$(git rev-parse HEAD)" ]]
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Select the Node.js version
+        id: node
+        run: |
+          set -euo pipefail
+          if [[ -f .nvmrc ]]; then
+            version="$(tr -d '[:space:]' < .nvmrc)"
+            version="${version#v}"
+          else
+            version=24
+          fi
+          [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          package-manager-cache: false
+
+      - name: Run the package tarball guard
+        run: |
+          set -euo pipefail
+          npm install -g npm@11.5.1
+          [[ "$(npm --version)" == "11.5.1" ]]
+          if [[ -f package-lock.json ]]; then
+            npm ci --ignore-scripts
+          fi
+          npm run check:pack
+
+      - name: Stamp the release version
+        env:
+          SOURCE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          # STAMP:BEGIN
+          import json
+          import os
+          import re
+          from pathlib import Path, PurePosixPath
+
+          def stamp(package_dir, version, repository):
+              stable = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
+              name = re.compile(r"@alpininsightsolutions/[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+              if stable.fullmatch(version) is None or version == "0.0.0":
+                  raise ValueError("A stable, nonzero MAJOR.MINOR.PATCH is required")
+              root = Path(package_dir)
+              path = root / "package.json"
+              if not path.is_file() or path.is_symlink():
+                  raise ValueError("Missing package.json")
+              data = json.loads(path.read_text(encoding="utf-8"))
+              if not isinstance(data, dict):
+                  raise ValueError("Invalid package.json")
+              package_name = str(data.get("name") or "")
+              if name.fullmatch(package_name) is None:
+                  raise ValueError("npm packages use the @alpininsightsolutions scope")
+              if "enterprise" in package_name:
+                  raise ValueError("Enterprise packages are not published")
+              if data.get("private") is True:
+                  raise ValueError("Private packages are not published")
+              if data.get("license") != "Apache-2.0":
+                  raise ValueError("npm packages declare Apache-2.0")
+              files = data.get("files")
+              if not isinstance(files, list) or len(files) == 0:
+                  raise ValueError("package.json needs a files allowlist")
+              for entry in files:
+                  if not isinstance(entry, str) or entry == "":
+                      raise ValueError("Invalid files entry")
+                  relative = PurePosixPath(entry)
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise ValueError("Unsafe files entry")
+              if not {"LICENSE", "NOTICE"} <= set(files):
+                  raise ValueError("The files allowlist must include LICENSE and NOTICE")
+              for packed_name in ("LICENSE", "NOTICE"):
+                  packed = root / packed_name
+                  if not packed.is_file() or packed.is_symlink():
+                      raise ValueError(f"Missing {packed_name}")
+              recorded = data.get("repository")
+              url = recorded.get("url") if isinstance(recorded, dict) else ""
+              expected = f"git+https://github.com/{repository}.git"
+              if url != expected:
+                  raise ValueError(
+                      "package.json repository.url must exactly match the publishing repository"
+                  )
+              data["version"] = version
+              path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+          def main():
+              tag = os.environ["SOURCE_TAG"]
+              if not tag.startswith("v"):
+                  raise ValueError("Release tag must start with v")
+              stamp(Path("."), tag[1:], os.environ["GITHUB_REPOSITORY"])
+
+          if __name__ == "__main__":
+              try:
+                  main()
+              except (ValueError, OSError, json.JSONDecodeError) as error:
+                  raise SystemExit(f"Publication gate failed: {error}") from error
+          # STAMP:END
+          PY
+
+      - name: Run the package release build
+        run: npm run build:release --if-present
+
+      - name: Publish the stamped tarball with provenance
+        run: |
+          set -euo pipefail
+          npm pack --ignore-scripts --json > "$RUNNER_TEMP/npm-pack.json"
+          tarball="$(python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          entries = json.loads(Path(os.environ["RUNNER_TEMP"], "npm-pack.json").read_text())
+          if len(entries) != 1 or "filename" not in entries[0]:
+              raise SystemExit("npm pack must emit exactly one tarball")
+          name = Path(entries[0]["filename"])
+          if name.is_absolute() or ".." in name.parts or name.suffix != ".tgz" or not name.is_file():
+              raise SystemExit("Unexpected npm pack filename")
+          print(name)
+          PY
+          )"
+          npm publish --provenance --access public --ignore-scripts "$tarball"
