@@ -7,12 +7,13 @@
   The packages-at-a-glance diagram shows the same `register.js` runtime from
   PyPI, npm, and the CDN. The npm package and CDN path are not live yet.
 - Publish npm releases from `.github/workflows/npm-publish.yml` in this
-  repository. It calls the central reusable workflow
-  `npm-publish-reusable.yml` in `alpininsight/.github-private`. The trusted
-  publisher is `alpininsight/ais-webmcp`, workflow `npm-publish.yml`,
-  environment `npm-ais-webmcp`. Releases go out only with Peter's go. The
-  first publish is the manual bootstrap. `prepublishOnly` rejects the
-  `0.0.0` placeholder.
+  repository. It calls `npm-publish-reusable.yml` in
+  `alpininsight/.github-private` with `package_dir` `.`, `ref` set to the
+  `vX.Y.Z` tag, and `environment` `npm-ais-webmcp`, and it passes no secrets.
+  The trusted publisher is `alpininsight/ais-webmcp`, workflow
+  `npm-publish.yml`, environment `npm-ais-webmcp`. Releases go out only with
+  Peter's go. The first publish is the manual bootstrap. `prepublishOnly`
+  rejects the `0.0.0` placeholder.
 - Type the browser runtime as one CommonJS export. Tool specs accept named
   interfaces, either `id` or `name`, and exactly one input-schema alias whose
   `type` is `"object"`. At most one of `outputSchema` or `output_schema` is

@@ -2,12 +2,14 @@
 
 `@alpininsightsolutions/webmcp` is the public browser runtime. Publishing
 runs from this repository. `.github/workflows/npm-publish.yml` is a manual
-`workflow_dispatch` on `main` with a tag input. It calls the central reusable
-workflow
+`workflow_dispatch` on `main` with a `vX.Y.Z` tag input. It calls the central
+reusable workflow
 `alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml`
-(being added in `.github-private` #730), which holds the publish logic. The
-trusted publisher is bound to GitHub repository `alpininsight/ais-webmcp`,
-workflow filename `npm-publish.yml`, and environment `npm-ais-webmcp`.
+(`.github-private` #730), which holds the publish logic. The caller passes
+`package_dir` `.`, `ref` from that tag, and `environment` `npm-ais-webmcp`.
+It passes no secrets. The trusted publisher is bound to GitHub repository
+`alpininsight/ais-webmcp`, workflow filename `npm-publish.yml`, and
+environment `npm-ais-webmcp`.
 Publishing uses npm Trusted Publishing (OIDC) and attaches provenance. It
 does not use an npm token. A release goes out only with Peter's go. The
 first publish is the manual bootstrap from `main`.

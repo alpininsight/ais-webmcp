@@ -7,21 +7,22 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish
+        description: Release tag vX.Y.Z
         required: true
         type: string
 permissions:
   contents: read
+  actions: write
   id-token: write
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
+      actions: write
       id-token: write
-    # TODO(.github-private#730): confirm these input names if the merged
-    # contract differs. A caller job cannot set environment.
     uses: alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main
     with:
-      tag: ${{ inputs.tag }}
+      package_dir: "."
+      ref: ${{ inputs.tag }}
       environment: npm-ais-webmcp

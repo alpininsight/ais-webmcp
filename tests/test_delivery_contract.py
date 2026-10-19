@@ -91,22 +91,27 @@ def test_npm_publish_caller_uses_the_central_reusable_workflow():
     triggers = workflow.get("on", workflow.get(True))
     assert set(triggers) == {"workflow_dispatch"}
     assert triggers["workflow_dispatch"]["inputs"]["tag"]["required"] is True
-    assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
+    permissions = {"contents": "read", "actions": "write", "id-token": "write"}
+    assert workflow["permissions"] == permissions
+    assert "secrets" not in workflow
     publish = workflow["jobs"]["publish"]
     assert publish["if"] == "github.ref == 'refs/heads/main'"
-    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    assert publish["permissions"] == permissions
+    assert "secrets" not in publish
     assert "runs-on" not in publish
     assert "environment" not in publish
     assert publish["uses"] == (
         "alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main"
     )
     assert publish["with"] == {
-        "tag": "${{ inputs.tag }}",
+        "package_dir": ".",
+        "ref": "${{ inputs.tag }}",
         "environment": "npm-ais-webmcp",
     }
 
     package = json.loads((ROOT / "package.json").read_text())
     assert package["name"] == "@alpininsightsolutions/webmcp"
+    assert package["repository"]["url"] == "git+https://github.com/alpininsight/ais-webmcp.git"
     assert (ROOT / "scripts/check-npm-pack.cjs").is_file()
     assert (ROOT / "scripts/sync-npm-version.cjs").is_file()
     assert (ROOT / "src/ais_webmcp/assets/register.d.ts").is_file()
