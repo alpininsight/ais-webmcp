@@ -33,12 +33,12 @@ explicitly enables and implements them.
 
 ## Output schemas
 
-Declare a Draft 2020-12 JSON Schema for each tool result next to its input
+Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12) for each tool result next to its input
 schema. The canonical key is `outputSchema`; `output_schema` is an alias, and
 only one of them may be set. `ToolSpec.output_schema` writes `outputSchema`.
 
 `ais-webmcp validate` checks a present output schema: it must be a JSON object
-and a valid Draft 2020-12 schema. An invalid schema fails validation. Omitting
+and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An invalid schema fails validation. Omitting
 the schema does not. The result stays `ok`, the exit code stays 0, and each
 tool without a schema adds a finding:
 
@@ -70,6 +70,49 @@ tarball is only the built `register.js`, its types, this README, `LICENSE`,
 and `NOTICE` (`package.json` is included because npm always packs it). A path
 under `enterprise/`, a path containing `webmcp_check`, or a `.env` file fails
 the tarball guard.
+
+| | |
+| --- | --- |
+| PyPI / CLI | `ais-webmcp` |
+| npm | `@alpininsightsolutions/webmcp` |
+| global | `InsightUiWebmcp` |
+| CDN path | `ais-webmcp/vX.Y.Z/` |
+
+```bash
+npm install @alpininsightsolutions/webmcp
+```
+
+```ts
+import InsightUiWebmcp from "@alpininsightsolutions/webmcp";
+
+const status = InsightUiWebmcp.status();
+if (status.supported) {
+  await InsightUiWebmcp.registerFromManifest(
+    {
+      profile: "webpage",
+      version: "1",
+      tools: [
+        {
+          id: "search",
+          name: "Search",
+          description: "Search this page",
+          inputSchema: {
+            type: "object",
+            properties: { q: { type: "string" } },
+          },
+        },
+      ],
+    },
+    {
+      search(input: { q?: string }) {
+        return { results: [] };
+      },
+    },
+  );
+}
+```
+
+A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 
 The committed npm version is the `0.0.0` placeholder. Publish stamps
 GitVersion's Major.Minor.Patch, the same version as the Python package, into

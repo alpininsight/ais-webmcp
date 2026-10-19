@@ -1,4 +1,5 @@
 import api = require("@alpininsightsolutions/webmcp");
+import InsightUiWebmcp from "@alpininsightsolutions/webmcp";
 
 interface SearchTool {
   name: string;
@@ -158,3 +159,33 @@ async function useRuntime(): Promise<void> {
 
 void useRuntime;
 void api.version;
+
+async function readmeExample(): Promise<void> {
+  const status = InsightUiWebmcp.status();
+  if (status.supported) {
+    await InsightUiWebmcp.registerFromManifest(
+      {
+        profile: "webpage",
+        version: "1",
+        tools: [
+          {
+            id: "search",
+            name: "Search",
+            description: "Search this page",
+            inputSchema: {
+              type: "object",
+              properties: { q: { type: "string" } },
+            },
+          },
+        ],
+      },
+      {
+        search(input: { q?: string }) {
+          return { results: [] };
+        },
+      },
+    );
+  }
+}
+
+void readmeExample;
