@@ -158,17 +158,17 @@ if (status.supported) {
 
 A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 
-The committed npm version is the `0.0.0` placeholder. Publish stamps
-GitVersion's Major.Minor.Patch, the same version as the Python package, into
-`package.json`. `npm run build:js` then injects that version into the
-`InsightUiWebmcp` object in the built bundle. `prepublishOnly` rejects
-`npm publish` while the version is still `0.0.0`. Publishing runs from this
-repository: `.github/workflows/npm-publish.yml` calls the central reusable
-workflow in `alpininsight/.github-private`
-(`.github/workflows/npm-publish-reusable.yml`) with Trusted Publishing and
-provenance. The trusted publisher is bound to `alpininsight/ais-webmcp`,
-workflow `npm-publish.yml`, and environment `npm-ais-webmcp`. A release goes
-out only with Peter's go. The first publish is the manual bootstrap.
+The committed npm version is the `0.0.0` placeholder. Publish stamps the
+`vX.Y.Z` tag, the same version as the Python package, into `package.json`.
+`npm run build:js` then injects that version into the `InsightUiWebmcp`
+object in the built bundle. `prepublishOnly` rejects `npm publish` while the
+version is still `0.0.0`. Publishing runs in this repository from
+`.github/workflows/npm-publish.yml` on `ubuntu-latest`, the canonical npm
+standard from `alpininsight/.github-private`. Trusted Publishing
+and provenance require that GitHub-hosted job. The trusted publisher is
+bound to `alpininsight/ais-webmcp`, workflow `npm-publish.yml`, and
+environment `npm-ais-webmcp`. A release goes out only with Peter's go.
+The first publish is the manual bootstrap.
 One-time npmjs.com setup is in [docs/release.md](docs/release.md).
 
 ## Development

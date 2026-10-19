@@ -36,7 +36,7 @@ def test_ci_uses_central_repository_policy():
         for name, body in callers.items()
         if any("runs-on" in job for job in body["jobs"].values())
     ]
-    assert set(local_runs) <= {"ci.yml", "release.yml"}
+    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml"}
 
 
 @pytest.mark.parametrize(
@@ -79,35 +79,53 @@ def test_publication_requires_source_check_and_review(
         publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
 
 
-def test_npm_publish_caller_uses_the_central_reusable_workflow():
-    """OIDC identity is this repo. Publish logic stays in .github-private."""
+def test_npm_publish_runs_in_this_repository():
+    """Trusted Publishing runs here on a GitHub-hosted runner. No private caller."""
     workflows = ROOT / ".github/workflows"
     text = (workflows / "npm-publish.yml").read_text()
     workflow_text = "\n".join(path.read_text() for path in sorted(workflows.glob("*.yml")))
     assert "npm-release" not in workflow_text
     assert re.search(r"npm-v(?!ersion)", workflow_text) is None
-    assert "npm publish --provenance" not in workflow_text
+    assert "npm-publish-reusable.yml" not in workflow_text
+    assert text.startswith(
+        "name: npm publish\n# canonical template: alpininsight/.github-private (npm standard)\n"
+    )
     workflow = yaml.safe_load(text)
     triggers = workflow.get("on", workflow.get(True))
     assert set(triggers) == {"workflow_dispatch"}
     assert triggers["workflow_dispatch"]["inputs"]["tag"]["required"] is True
-    permissions = {"contents": "read", "actions": "write", "id-token": "write"}
+    permissions = {"contents": "read", "id-token": "write"}
     assert workflow["permissions"] == permissions
     assert "secrets" not in workflow
     publish = workflow["jobs"]["publish"]
     assert publish["if"] == "github.ref == 'refs/heads/main'"
+    assert publish["runs-on"] == "ubuntu-latest"
+    assert publish["environment"] == "npm-ais-webmcp"
     assert publish["permissions"] == permissions
     assert "secrets" not in publish
-    assert "runs-on" not in publish
-    assert "environment" not in publish
-    assert publish["uses"] == (
-        "alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main"
+    assert "uses" not in publish
+    joined = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "npm ci" in joined
+    assert "npm run check:pack" in joined
+    assert "scripts/sync-npm-version.cjs" in joined
+    assert "npm run build:js" in joined
+    assert "npm publish --provenance --access public --ignore-scripts" in joined
+    checkout = next(
+        step
+        for step in publish["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
     )
-    assert publish["with"] == {
-        "package_dir": ".",
-        "ref": "${{ inputs.tag }}",
-        "environment": "npm-ais-webmcp",
-    }
+    assert checkout["uses"].startswith("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+    assert checkout["with"]["ref"] == "${{ inputs.tag }}"
+    assert checkout["with"]["persist-credentials"] is False
+    node = next(
+        step
+        for step in publish["steps"]
+        if str(step.get("uses", "")).startswith("actions/setup-node@")
+    )
+    assert node["uses"].startswith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
+    assert node["with"]["node-version-file"] == ".nvmrc"
+    assert "registry-url" not in node["with"]
 
     package = json.loads((ROOT / "package.json").read_text())
     assert package["name"] == "@alpininsightsolutions/webmcp"
@@ -120,7 +138,8 @@ def test_npm_publish_caller_uses_the_central_reusable_workflow():
     release_doc = (ROOT / "docs/release.md").read_text()
     for doc in (readme, release_doc):
         assert "npm-publish.yml" in doc
-        assert "npm-publish-reusable.yml" in doc
+        assert "npm-publish-reusable.yml" not in doc
+        assert "ubuntu-latest" in doc
         assert "npm-ais-webmcp" in doc
         assert ".github-private" in doc
         assert "alpininsight/ais-webmcp" in doc

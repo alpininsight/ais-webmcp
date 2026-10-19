@@ -1,17 +1,20 @@
 # npm release
 
 `@alpininsightsolutions/webmcp` is the public browser runtime. Publishing
-runs from this repository. `.github/workflows/npm-publish.yml` is a manual
-`workflow_dispatch` on `main` with a `vX.Y.Z` tag input. It calls the central
-reusable workflow
-`alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml`
-(`.github-private` #730), which holds the publish logic. The caller passes
-`package_dir` `.`, `ref` from that tag, and `environment` `npm-ais-webmcp`.
-It passes no secrets. The trusted publisher is bound to GitHub repository
+runs in this repository. `.github/workflows/npm-publish.yml` is the canonical
+npm standard from `alpininsight/.github-private`. A public repository cannot
+call a private reusable workflow, and npm Trusted Publishing requires the
+publish to run here on a GitHub-hosted runner, so the job uses
+`ubuntu-latest`. It is a manual `workflow_dispatch` on `main` with a
+`vX.Y.Z` tag input, environment `npm-ais-webmcp`, and permissions
+`contents: read` and `id-token: write`. It checks out that tag, installs
+Node from `.nvmrc` with npm >= 11.5.1, runs `npm ci` and `npm run check:pack`,
+stamps the tag with `scripts/sync-npm-version.cjs`, injects that version with
+`npm run build:js`, then runs
+`npm publish --provenance --access public --ignore-scripts`.
+No npm token. The trusted publisher is bound to GitHub repository
 `alpininsight/ais-webmcp`, workflow filename `npm-publish.yml`, and
-environment `npm-ais-webmcp`.
-Publishing uses npm Trusted Publishing (OIDC) and attaches provenance. It
-does not use an npm token. A release goes out only with Peter's go. The
+environment `npm-ais-webmcp`. A release goes out only with Peter's go. The
 first publish is the manual bootstrap from `main`.
 
 ## Version
@@ -21,11 +24,12 @@ second version source. `js/register.source.cjs` keeps that same placeholder.
 `scripts/build-js.cjs` replaces it in the built bundle with `package.json`'s
 version, so `InsightUiWebmcp.version` matches the npm package.
 
-The reusable workflow reads GitVersion `major_minor_patch` — the same value
-`scripts/build_delivery.py` stamps into the Python package — and
+The workflow takes the `vX.Y.Z` tag, strips the leading `v`, and
 `scripts/sync-npm-version.cjs` writes that exact `MAJOR.MINOR.PATCH` into
-`package.json`. The next step runs `npm run build:js`, which injects it into
-`register.js`. `0.0.0` and pre-release versions are refused.
+`package.json`. That tag is the same release version
+`scripts/build_delivery.py` stamps into the Python package. The next step
+runs `npm run build:js`, which injects it into `register.js`. `0.0.0` and
+pre-release versions are refused.
 
 ## One-time setup on npmjs.com
 
@@ -43,13 +47,11 @@ Owner: Peter. Publish only with Peter's go.
    - Environment name: `npm-ais-webmcp`
    - Allowed actions: enable direct `npm publish`. `npm stage publish` is
      always allowed. Trusted publishers created after 3 September 2026 default
-     to staged publishing only. The reusable workflow publishes directly and
-     attaches provenance, so leave the publisher able to publish directly.
+     to staged publishing only. This workflow publishes directly and attaches
+     provenance, so leave the publisher able to publish directly.
 3. In this repository's Actions settings, create an environment named
    `npm-ais-webmcp`. Add the usual required reviewers. Add no secrets and no
-   npm token. A job that calls a reusable workflow cannot set `environment`
-   itself; `npm-publish.yml` passes the name `npm-ais-webmcp` and the reusable
-   workflow applies it.
+   npm token. The publish job sets that environment.
 4. Do not create an npm automation token or granular access token. The first
    publish is the manual bootstrap: run `npm-publish.yml` with
    `workflow_dispatch` from `main`, and only with Peter's go.
@@ -71,6 +73,7 @@ repository pin (`.nvmrc` and `devEngines`). `devEngines` applies when
 someone works in this source tree; installing the browser runtime does not
 warn on other Node versions.
 
-`npm publish` runs `prepublishOnly`, which rejects the committed `0.0.0`
-placeholder. The reusable workflow stamps the release version before that
-command.
+The workflow publishes with `--ignore-scripts`, so `prepublishOnly` does not
+run there. It stamps the release version before that command. A local
+`npm publish` still runs `prepublishOnly`, which rejects the committed
+`0.0.0` placeholder.

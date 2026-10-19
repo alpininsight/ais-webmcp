@@ -1,8 +1,8 @@
 name: npm publish
-# Thin caller. Publish logic is alpininsight/.github-private
-# .github/workflows/npm-publish-reusable.yml (.github-private#730).
+# canonical template: alpininsight/.github-private (npm standard)
 # Trusted publisher: repository ais-webmcp, this filename, environment
-# npm-ais-webmcp. No npm token. The first publish is a manual bootstrap.
+# npm-ais-webmcp. GitHub-hosted runner. No npm token.
+# The first publish is a manual bootstrap from main, only with Peter's go.
 on:
   workflow_dispatch:
     inputs:
@@ -12,17 +12,42 @@ on:
         type: string
 permissions:
   contents: read
-  actions: write
   id-token: write
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm-ais-webmcp
     permissions:
       contents: read
-      actions: write
       id-token: write
-    uses: alpininsight/.github-private/.github/workflows/npm-publish-reusable.yml@main
-    with:
-      package_dir: "."
-      ref: ${{ inputs.tag }}
-      environment: npm-ais-webmcp
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Require npm >= 11.5.1
+        run: |
+          version="$(npm --version)"
+          node -e 'const v=process.argv[1].split(".").map(Number); const ok=v[0]>11||(v[0]===11&&(v[1]>5||(v[1]===5&&v[2]>=1))); if(!ok) process.exit(1)' "$version"
+          echo "npm $version"
+      - run: npm ci
+      - run: npm run check:pack
+      - name: Stamp the package version from the tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            v*.*.*) ;;
+            *) echo "tag must be vX.Y.Z" >&2; exit 1 ;;
+          esac
+          node scripts/sync-npm-version.cjs --version "${RELEASE_TAG#v}"
+      - name: Inject the stamped version into the browser bundle
+        run: npm run build:js
+      - name: Publish to npm
+        run: npm publish --provenance --access public --ignore-scripts
