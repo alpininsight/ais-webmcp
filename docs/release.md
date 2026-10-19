@@ -35,6 +35,10 @@ Owner: Peter.
    - Repository: `ais-webmcp`
    - Workflow filename: `npm-publish.yml`
    - Environment name: `npm-release`
+   - Allowed actions: enable direct `npm publish`. `npm stage publish` is
+     always allowed. Trusted publishers created after 3 September 2026 default
+     to staged publishing only. This workflow runs `npm publish` directly, so
+     leave the publisher able to publish directly.
 3. In the GitHub repository settings, create an Actions environment named
    `npm-release`. Limit it to `main` (and `npm-v*` tags, if the environment
    rules distinguish tags). Add the usual required reviewers. Add no secrets.
@@ -60,3 +64,10 @@ The published `package.json` does not set `engines`. Node 24 is the
 repository pin (`.nvmrc` and `devEngines`). `devEngines` applies when
 someone works in this source tree; installing the browser runtime does not
 warn on other Node versions.
+
+`npm publish` runs `prepublishOnly`, which rejects the committed `0.0.0`
+placeholder. The workflow stamps the release version before that command.
+Every publish shares the concurrency group `webmcp-npm-publish`, so tag and
+manual releases cannot publish at the same time. The publish job runs on the
+GitHub-hosted runner `ubuntu-24.04`. npm Trusted Publishing does not accept
+self-hosted runners, including this repo's `general` label.

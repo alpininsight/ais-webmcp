@@ -74,7 +74,10 @@ the tarball guard.
 The committed npm version is the `0.0.0` placeholder. Publish stamps
 GitVersion's Major.Minor.Patch, the same version as the Python package, into
 `package.json`. `npm run build:js` then injects that version into the
-`InsightUiWebmcp` object in the built bundle.
+`InsightUiWebmcp` object in the built bundle. `prepublishOnly` rejects
+`npm publish` while the version is still `0.0.0`. The publish job uses the
+GitHub-hosted runner `ubuntu-24.04` because npm Trusted Publishing does not
+accept self-hosted runners.
 One-time npmjs.com setup (owner: Peter) and the publish rule are in
 [docs/release.md](docs/release.md).
 

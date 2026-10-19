@@ -44,6 +44,19 @@ test("package metadata is the public scoped runtime", () => {
     runtime: { name: "node", version: ">=24 <25", onFail: "error" },
   });
   assert.equal(fs.readFileSync(path.join(ROOT, ".nvmrc"), "utf8").trim(), "24");
+  assert.equal(
+    manifest.scripts.prepublishOnly,
+    "node scripts/assert-npm-release-version.cjs",
+  );
+});
+
+test("prepublishOnly rejects the placeholder version", () => {
+  const result = spawnSync(process.execPath, ["scripts/assert-npm-release-version.cjs"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nonzero GitVersion/);
 });
 
 test("packed files must match the allowlist", () => {

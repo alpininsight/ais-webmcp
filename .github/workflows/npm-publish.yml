@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: webmcp-npm-publish-${{ github.ref }}
+  group: webmcp-npm-publish
   cancel-in-progress: false
 jobs:
   version:
@@ -20,7 +20,8 @@ jobs:
   publish:
     needs: version
     if: needs.version.result == 'success'
-    runs-on: general
+    # npm Trusted Publishing rejects self-hosted runners. `general` is self-hosted.
+    runs-on: ubuntu-24.04
     environment: npm-release
     permissions:
       contents: read

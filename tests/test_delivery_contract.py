@@ -97,7 +97,11 @@ def test_npm_publish_is_trusted_publishing_without_tokens():
     publish = workflow["jobs"]["publish"]
     assert publish["environment"] == "npm-release"
     assert publish["permissions"] == {"contents": "read", "id-token": "write"}
-    assert publish["runs-on"] == "general"
+    assert workflow["concurrency"] == {
+        "group": "webmcp-npm-publish",
+        "cancel-in-progress": False,
+    }
+    assert publish["runs-on"] == "ubuntu-24.04"
     assert "secrets" not in publish
     joined = "\n".join(step.get("run", "") for step in publish["steps"])
     assert "npm run check:js-build" in joined

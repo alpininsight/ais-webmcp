@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Publish npm releases from the GitHub-hosted runner `ubuntu-24.04`, in one
+  concurrency group. `prepublishOnly` rejects the `0.0.0` placeholder.
+  Trusted-publisher setup must allow direct `npm publish`.
+- Type the browser runtime as one CommonJS export. Tool specs accept named
+  interfaces, manifests include `$schema`, `anchors`, and `notes`, and
+  manifest-level errors are not typed as results with required `ok`.
 - Pin Node 24 for repository development with `.nvmrc` and `devEngines`.
   The published package does not set `engines`.
 - Inject `package.json`'s version into `InsightUiWebmcp.version` when
