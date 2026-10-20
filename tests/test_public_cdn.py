@@ -86,6 +86,14 @@ def test_every_object_and_alias_is_read_in_full(bundle, monkeypatch):
     }
     assert all(request.get_method() == "GET" for request in requests)
     assert all(
+        request.get_header("User-agent") == "AlpinInsight-WebMCP-PublicationVerifier/1.0"
+        and request.get_header("Accept") == "*/*"
+        and request.get_header("Origin") == "https://insight-ui.com"
+        and not request.has_header("Cookie")
+        and not request.has_header("Authorization")
+        for request in requests
+    )
+    assert all(
         not request.has_header("Range") and "?" not in request.full_url for request in requests
     )
     assert all(len(x["sha256"]) == 64 and x["size"] > 0 for x in report)
