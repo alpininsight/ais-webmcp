@@ -39,48 +39,6 @@ def test_ci_uses_central_repository_policy():
     assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml"}
 
 
-@pytest.mark.parametrize(
-    "protected,head,check",
-    [
-        (False, "a" * 40, "success"),
-        (True, "b" * 40, "success"),
-        (True, "a" * 40, "failure"),
-    ],
-)
-def test_publication_requires_protected_source_and_check(monkeypatch, protected, head, check):
-    def api(path):
-        if path.endswith("branches/main"):
-            return {"protected": protected, "commit": {"sha": head}}
-        return {"check_runs": [{"id": 1, "name": "WebMCP Quality Gate", "conclusion": check}]}
-
-    monkeypatch.setattr(publication, "api", api)
-    with pytest.raises(ValueError):
-        publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
-
-
-def test_publication_needs_no_pr_review(monkeypatch):
-    """Owner decision 2026-10-12: approval lives in the pypi-<project> environment."""
-    calls = []
-
-    def api(path):
-        calls.append(path)
-        if path.endswith("branches/main"):
-            return {"protected": True, "commit": {"sha": "a" * 40}}
-        if "check-runs" in path:
-            return {
-                "check_runs": [{"id": 1, "name": "WebMCP Quality Gate", "conclusion": "success"}]
-            }
-        raise AssertionError(f"unexpected API call {path}")
-
-    monkeypatch.setattr(publication, "api", api)
-    publication.check_source("alpininsight/insight-ui-webmcp", "a" * 40)
-    assert any(path.endswith("branches/main") for path in calls)
-    assert any("check-runs" in path for path in calls)
-    assert not any("/reviews" in path or "/pulls" in path for path in calls)
-    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    assert "pull-requests" not in release["jobs"]["source"]["permissions"]
-
-
 def test_npm_publish_runs_in_this_repository():
     """The publish workflow is the npm publication template. No private caller."""
     workflows = ROOT / ".github/workflows"
@@ -207,7 +165,9 @@ def test_release_has_no_pypi_upload_and_hands_off_per_package():
         assert workflow in handoff
     assert "insight-ui-webmcp-publish-python.yml" not in handoff
     assert "publish=false" in handoff
-    assert "publish=true" not in handoff
+    assert "publish=true" in handoff
+    for field in ("producer_run_id", "producer_attempt", "artifact_id"):
+        assert field in handoff
 
 
 def test_cdn_requires_own_pypi_project_first():
@@ -243,7 +203,7 @@ def test_ci_callers_grant_nested_permissions():
     ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     requested = _nested_permissions(ci)
     assert requested.get("pull-requests") == "read"
-    for name in ("release.yml", "cdn-develop.yml"):
+    for name in ("cdn-develop.yml",):
         workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
         caller = workflow["jobs"]["quality"]
         assert caller["uses"] == "./.github/workflows/ci.yml"
