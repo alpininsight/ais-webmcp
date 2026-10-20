@@ -37,6 +37,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - name: Reuse exact main CI evidence and validate requested activation
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,7 +59,7 @@ jobs:
             fi
             set -- --require-merged-pr
           fi
-          python3 scripts/check_publication.py source --repository "$SOURCE_REPOSITORY" --sha "$SOURCE_SHA" "$@"
+          uv run --no-project --python 3.14 python scripts/check_publication.py source --repository "$SOURCE_REPOSITORY" --sha "$SOURCE_SHA" "$@"
   # Only the separate, explicitly requested CDN contract needs a local delivery.
   build:
     if: inputs.cdn
@@ -140,14 +144,18 @@ jobs:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: bundle
           merge-multiple: true
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - name: Require the core PyPI project with this build's exact files
         timeout-minutes: 6
         env:
           SOURCE_SHA: ${{ github.sha }}
           PACKAGE_VERSION: ${{ needs.version.outputs.major_minor_patch }}
         run: |
-          python3 scripts/check_publication.py bundle --sha "$SOURCE_SHA" --version "$PACKAGE_VERSION"
-          python3 scripts/check_publication.py index --version "$PACKAGE_VERSION"
+          uv run --no-project --python 3.14 python scripts/check_publication.py bundle --sha "$SOURCE_SHA" --version "$PACKAGE_VERSION"
+          uv run --no-project --python 3.14 python scripts/check_publication.py index --version "$PACKAGE_VERSION"
   cdn:
     if: inputs.cdn && vars.WEBMCP_CDN_PUBLISH_ENABLED == 'true'
     needs: [pypi-verified, version]
@@ -189,13 +197,17 @@ jobs:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: bundle
           merge-multiple: true
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - name: Verify every canonical public CDN object's full bytes and headers
         env:
           SOURCE_SHA: ${{ github.sha }}
           PACKAGE_VERSION: ${{ needs.version.outputs.major_minor_patch }}
         run: |
-          python3 scripts/check_publication.py bundle --sha "$SOURCE_SHA" --version "$PACKAGE_VERSION"
-          python3 scripts/check_publication.py cdn --version "$PACKAGE_VERSION" --report cdn-evidence.json
+          uv run --no-project --python 3.14 python scripts/check_publication.py bundle --sha "$SOURCE_SHA" --version "$PACKAGE_VERSION"
+          uv run --no-project --python 3.14 python scripts/check_publication.py cdn --version "$PACKAGE_VERSION" --report cdn-evidence.json
       - name: Retain the public CDN evidence separately from package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
