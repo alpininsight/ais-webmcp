@@ -7,10 +7,26 @@ base-branch retargeting (`edited` with `changes.base`). A push to `main` also ru
 full CI. Develop pushes do not launch another matrix; the integration and release
 promotion PRs provide their own tests. Manual CI remains available.
 
-Title/body edits and `ready_for_review` run only the read-only central Repository
-Policy and `PR Metadata Check`. Their concurrency group is separate from full CI,
-so editing a description cannot cancel running tests. Only full CI produces
-`WebMCP Quality Gate`; skipped tests must never produce that successful check.
+Title/body edits and `ready_for_review` run read-only Repository Policy and a
+Quality Gate that **revalidates existing full CI evidence**, without rerunning
+its matrix. `run-name` is the trusted `CI full` / `CI metadata` sentinel. Separate
+concurrency groups prevent a description edit from cancelling running tests.
+
+The metadata gate checks the latest full PR producer for the same repository,
+PR number, head, base SHA/ref and current attempt. It requires its unique genuine
+Quality Gate and every configured code contract to have succeeded. A failed or
+cancelled newer producer cannot be replaced by an older green run; a previous
+metadata carrier cannot be reused recursively. If full CI is still running, it
+waits for up to 20 minutes and fails closed on timeout or API/identity errors.
+The step summary records the original run, attempt and job IDs and explicitly
+states that no tests were rerun. A final PR/producer readback rejects a concurrent
+retarget or rerun. Only an isolated Repository Policy failure may coexist with
+successful full code evidence, so a title correction needs no second matrix.
+
+A real canary showed that changing the required job name to `PR Metadata Check`
+in a newer `ci.yml` suite leaves GitHub expecting its Quality Gate, even with the
+older green check present. The static required name therefore remains, backed by
+verified full-test evidence rather than a successful result inferred from skips.
 
 Require **both** `WebMCP Quality Gate` and
 `repository-policy / Repository Policy` on develop and main. Policy and code

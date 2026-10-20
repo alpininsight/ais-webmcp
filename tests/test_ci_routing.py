@@ -85,8 +85,8 @@ def test_execute_routing_for_code_metadata_and_base_retarget(
         ("full", "success", "success", "cancelled success", 1),
         ("full", "success", "success", "skipped success", 1),
         ("metadata", "success", "success", "skipped skipped", 0),
-        ("metadata", "success", "failure", "skipped skipped", 1),
-        ("metadata", "success", "skipped", "skipped skipped", 1),
+        ("metadata", "success", "failure", "skipped skipped", 0),
+        ("metadata", "success", "skipped", "skipped skipped", 0),
         ("metadata", "success", "success", "success skipped", 1),
         ("metadata", "failure", "success", "skipped skipped", 1),
         ("unknown", "success", "success", "success success", 1),
@@ -95,7 +95,7 @@ def test_execute_routing_for_code_metadata_and_base_retarget(
     ],
 )
 def test_execute_quality_and_metadata_gates(mode, classify, policy, contracts, expected):
-    step = WORKFLOW["jobs"]["gate"]["steps"][0]
+    step = WORKFLOW["jobs"]["gate"]["steps"][-1]
     expected_count = int(step["env"]["EXPECTED_CONTRACTS"])
     if len(contracts.split()) == 2:
         contracts += " " + " ".join([contracts.split()[-1]] * (expected_count - 2))
@@ -107,6 +107,7 @@ def test_execute_quality_and_metadata_gates(mode, classify, policy, contracts, e
             "MODE": mode,
             "CLASSIFY_RESULT": classify,
             "POLICY_RESULT": policy,
+            "EVIDENCE_RESULT": "success",
             "CONTRACT_RESULTS": contracts,
         },
         capture_output=True,
@@ -115,19 +116,41 @@ def test_execute_quality_and_metadata_gates(mode, classify, policy, contracts, e
     assert (result.returncode != 0) == bool(expected), result.stderr
 
 
-def test_metadata_never_emits_the_required_quality_gate():
+def test_metadata_quality_gate_requires_explicit_full_evidence():
     jobs = WORKFLOW["jobs"]
     gate = jobs["gate"]
     quality_name = "Enterprise Quality Gate" if "redis-contract" in jobs else "WebMCP Quality Gate"
-    assert gate["name"] == (
-        "${{ needs.classify.outputs.mode == 'metadata' && 'PR Metadata Check' || '"
-        + quality_name
-        + "' }}"
-    )
+    assert gate["name"] == quality_name
     contracts = set(gate["needs"]) - {"repository-policy", "classify"}
     assert contracts
     for name in contracts:
         assert jobs[name]["needs"] == "classify"
         assert jobs[name]["if"] == "needs.classify.outputs.mode == 'full'"
-        assert "${{ needs." + name + ".result }}" in gate["steps"][0]["env"]["CONTRACT_RESULTS"]
-    assert gate["steps"][0]["env"]["POLICY_RESULT"] == "${{ needs.repository-policy.result }}"
+        assert "${{ needs." + name + ".result }}" in gate["steps"][-1]["env"]["CONTRACT_RESULTS"]
+    assert gate["steps"][-1]["env"]["EVIDENCE_RESULT"] == "${{ steps.evidence.outcome }}"
+    assert gate["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
+    evidence = next(step for step in gate["steps"] if step.get("id") == "evidence")
+    assert evidence["if"] == "needs.classify.outputs.mode == 'metadata'"
+    assert "check_ci_evidence.py" in evidence["run"]
+    assert "--summary" in evidence["run"]
+    assert not evidence.get("continue-on-error")
+    assert WORKFLOW["run-name"] == "${{ " + METADATA + " && 'CI metadata' || 'CI full' }}"
+
+
+@pytest.mark.parametrize("outcome", ["skipped", "failure", "cancelled", ""])
+def test_metadata_gate_cannot_pass_without_verified_evidence(outcome):
+    step = WORKFLOW["jobs"]["gate"]["steps"][-1]
+    count = step["env"]["EXPECTED_CONTRACTS"]
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        env={
+            **os.environ,
+            "MODE": "metadata",
+            "CLASSIFY_RESULT": "success",
+            "EVIDENCE_RESULT": outcome,
+            "EXPECTED_CONTRACTS": count,
+            "CONTRACT_RESULTS": " ".join(["skipped"] * int(count)),
+        },
+        capture_output=True,
+    )
+    assert result.returncode != 0

@@ -1,4 +1,5 @@
 name: CI
+run-name: ${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'CI metadata' || 'CI full' }}
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, edited]
@@ -104,18 +105,49 @@ jobs:
       - name: npm pack --dry-run --json
         run: node scripts/check-npm-pack.cjs
   gate:
-    # Metadata runs must never replace the required code-quality check.
-    name: ${{ needs.classify.outputs.mode == 'metadata' && 'PR Metadata Check' || 'WebMCP Quality Gate' }}
+    # Metadata must verify a real full producer, never infer success from skipped tests.
+    name: WebMCP Quality Gate
     needs: [classify, repository-policy, quality, compatibility, assets, npm-pack]
     if: always() && !cancelled()
     runs-on: general
-    timeout-minutes: 5
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.classify.outputs.mode == 'metadata'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: needs.classify.outputs.mode == 'metadata'
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - name: Verify the latest full PR CI evidence
+        id: evidence
+        if: needs.classify.outputs.mode == 'metadata'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_PR: ${{ github.event.pull_request.number }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha }}
+          CI_BASE: ${{ github.event.pull_request.base.sha }}
+          CI_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          CI_GATE: 'WebMCP Quality Gate'
+          CI_CONTRACTS: '["quality / Quality (3.12)", "quality / Quality (3.13)", "quality / Quality (3.14)", "quality / Quality Gate", "quality / Gitleaks", "Minimum supported dependencies", "assets / Static Assets", "npm tarball guard"]'
+        run: |
+          uv run --no-project --python 3.14 python scripts/check_ci_evidence.py \
+            --repository "$CI_REPOSITORY" --pr "$CI_PR" --head "$CI_HEAD" \
+            --base "$CI_BASE" --base-ref "$CI_BASE_REF" --gate "$CI_GATE" \
+            --contracts "$CI_CONTRACTS" --summary "$GITHUB_STEP_SUMMARY"
       - name: Require the contracts for this event
         env:
           MODE: ${{ needs.classify.outputs.mode }}
           CLASSIFY_RESULT: ${{ needs.classify.result }}
-          POLICY_RESULT: ${{ needs.repository-policy.result }}
+          EVIDENCE_RESULT: ${{ steps.evidence.outcome }}
           EXPECTED_CONTRACTS: '4'
           CONTRACT_RESULTS: ${{ needs.quality.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
         run: |
@@ -123,7 +155,7 @@ jobs:
           read -r -a results <<< "$CONTRACT_RESULTS"
           test "${#results[@]}" -eq "$EXPECTED_CONTRACTS"
           if [ "$MODE" = metadata ]; then
-            test "$POLICY_RESULT" = success
+            test "$EVIDENCE_RESULT" = success
             for result in "${results[@]}"; do
               test "$result" = skipped
             done
