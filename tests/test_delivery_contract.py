@@ -36,7 +36,7 @@ def test_ci_uses_central_repository_policy():
         for name, body in callers.items()
         if any("runs-on" in job for job in body["jobs"].values())
     ]
-    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml"}
+    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml", "cdn-develop.yml"}
 
 
 def test_npm_publish_runs_in_this_repository():

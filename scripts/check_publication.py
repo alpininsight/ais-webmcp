@@ -214,7 +214,14 @@ def verify_cdn(bundle, version):
 
 
 def _verify_cdn_object(url, path, expected, immutable, origin):
-    request = urllib.request.Request(url, headers={"Origin": origin})
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Origin": origin,
+            "User-Agent": "AlpinInsight-WebMCP-PublicationVerifier/1.0",
+            "Accept": "*/*",
+        },
+    )
     with urllib.request.urlopen(request, timeout=20) as response:
         if response.status != 200 or response.geturl() != url:
             raise ValueError(f"canonical CDN GET failed: {url}")
