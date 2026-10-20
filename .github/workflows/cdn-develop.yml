@@ -13,6 +13,7 @@ jobs:
     # less fails at startup even though that job is skipped off pull_request.
     permissions:
       contents: read
+      actions: read
       pull-requests: read
     uses: ./.github/workflows/ci.yml
   version:

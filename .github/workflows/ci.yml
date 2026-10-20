@@ -1,26 +1,48 @@
 name: CI
+run-name: ${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'CI metadata' || 'CI full' }}
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
-    branches: [develop, main]
+    branches: [main]
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'metadata' || 'full' }}
   cancel-in-progress: true
 jobs:
+  classify:
+    runs-on: general
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+    steps:
+      - id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          BASE_CHANGED: ${{ github.event.changes.base != null }}
+        run: |
+          mode=full
+          if [ "$EVENT_NAME" = pull_request ] && [ "$BASE_CHANGED" = false ]; then
+            case "$ACTION" in
+              edited|ready_for_review) mode=metadata ;;
+            esac
+          fi
+          printf 'mode=%s\n' "$mode" >> "$GITHUB_OUTPUT"
   repository-policy:
     # Central policy replaces the previous inline branch script.
-    # Skipped off pull_request so release/CDN workflow_call stays green.
+    # Policy is required separately; title edits must not invalidate tested code.
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: read
     uses: alpininsight/.github-private/.github/workflows/repository-policy-reusable.yml@main
   quality:
+    needs: classify
+    if: needs.classify.outputs.mode == 'full'
     uses: alpininsight/.github-private/.github/workflows/python-django-quality-reusable.yml@main
     with:
       runner_profile: general
@@ -33,6 +55,8 @@ jobs:
       format_command: uv run --locked ruff format --check src tests scripts
       test_command: uv lock --check && uv run --locked pytest
   compatibility:
+    needs: classify
+    if: needs.classify.outputs.mode == 'full'
     name: Minimum supported dependencies
     runs-on: general
     timeout-minutes: 15
@@ -55,6 +79,8 @@ jobs:
           uv pip check
           uv run --no-sync pytest --ignore=tests/test_distribution.py
   assets:
+    needs: classify
+    if: needs.classify.outputs.mode == 'full'
     uses: alpininsight/.github-private/.github/workflows/static-assets-reusable.yml@main
     with:
       node_version: '24'
@@ -63,6 +89,8 @@ jobs:
       check_command: npm run check:js-build && npm test
       upload_cdn: false
   npm-pack:
+    needs: classify
+    if: needs.classify.outputs.mode == 'full'
     name: npm tarball guard
     runs-on: general
     timeout-minutes: 10
@@ -77,65 +105,63 @@ jobs:
       - name: npm pack --dry-run --json
         run: node scripts/check-npm-pack.cjs
   gate:
+    # Metadata must verify a real full producer, never infer success from skipped tests.
     name: WebMCP Quality Gate
-    needs: [repository-policy, quality, compatibility, assets, npm-pack]
+    needs: [classify, repository-policy, quality, compatibility, assets, npm-pack]
     if: always() && !cancelled()
     runs-on: general
-    timeout-minutes: 5
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     steps:
-      - name: Require every contract
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.classify.outputs.mode == 'metadata'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: needs.classify.outputs.mode == 'metadata'
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - name: Verify the latest full PR CI evidence
+        id: evidence
+        if: needs.classify.outputs.mode == 'metadata'
         env:
-          RESULTS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_PR: ${{ github.event.pull_request.number }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha }}
+          CI_BASE: ${{ github.event.pull_request.base.sha }}
+          CI_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          CI_GATE: 'WebMCP Quality Gate'
+          CI_CONTRACTS: '["quality / Quality (3.12)", "quality / Quality (3.13)", "quality / Quality (3.14)", "quality / Quality Gate", "quality / Gitleaks", "Minimum supported dependencies", "assets / Static Assets", "npm tarball guard"]'
         run: |
-          if command -v python3 >/dev/null 2>&1; then
-            python3 - <<'PY'
-          import json, os
-          results = json.loads(os.environ["RESULTS"])
-          failed = {
-              name: job["result"]
-              for name, job in results.items()
-              if job["result"] != "success"
-              and not (name == "repository-policy" and job["result"] == "skipped")
-          }
-          if failed:
-              raise SystemExit(f"quality gate failed: {failed}")
-          PY
-            exit 0
-          fi
-          # Some general runners do not ship python3.
-          job=
-          failed=
-          while IFS= read -r line || [ -n "$line" ]; do
-            trimmed=${line#"${line%%[![:space:]]*}"}
-            case "$trimmed" in
-              '"'*)
-                case "$trimmed" in
-                  *'": {'|*'":{')
-                    key=${trimmed#\"}
-                    key=${key%%\"*}
-                    case "$key" in
-                      outputs|result) ;;
-                      *) job=$key ;;
-                    esac
-                    ;;
-                esac
-                ;;
-            esac
-            case "$trimmed" in
-              *'"result":'*)
-                result=${trimmed#*'"result":'}
-                result=${result#*\"}
-                result=${result%%\"*}
-                if [ "$result" != "success" ] &&
-                  { [ "$job" != "repository-policy" ] || [ "$result" != "skipped" ]; }; then
-                  failed="${failed}${job}=${result} "
-                fi
-                ;;
-            esac
-          done <<EOF
-          $RESULTS
-          EOF
-          if [ -n "$failed" ]; then
-            echo "quality gate failed: ${failed}" >&2
-            exit 1
+          uv run --no-project --python 3.14 python scripts/check_ci_evidence.py \
+            --repository "$CI_REPOSITORY" --pr "$CI_PR" --head "$CI_HEAD" \
+            --base "$CI_BASE" --base-ref "$CI_BASE_REF" --gate "$CI_GATE" \
+            --contracts "$CI_CONTRACTS" --summary "$GITHUB_STEP_SUMMARY"
+      - name: Require the contracts for this event
+        env:
+          MODE: ${{ needs.classify.outputs.mode }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          EVIDENCE_RESULT: ${{ steps.evidence.outcome }}
+          EXPECTED_CONTRACTS: '4'
+          CONTRACT_RESULTS: ${{ needs.quality.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
+        run: |
+          test "$CLASSIFY_RESULT" = success
+          read -r -a results <<< "$CONTRACT_RESULTS"
+          test "${#results[@]}" -eq "$EXPECTED_CONTRACTS"
+          if [ "$MODE" = metadata ]; then
+            test "$EVIDENCE_RESULT" = success
+            for result in "${results[@]}"; do
+              test "$result" = skipped
+            done
+          else
+            test "$MODE" = full
+            for result in "${results[@]}"; do
+              test "$result" = success
+            done
           fi

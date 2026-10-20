@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Separate PR metadata policy checks from code CI, remove duplicate Develop-push
+  matrices, and reuse exact Main-push evidence for source releases. Build stable
+  Python files once in the central producer and publish the reviewed bundle by
+  immutable producer/run/attempt/artifact IDs. Keep CDN evidence separate.
+
 - Document `npm install @alpininsightsolutions/webmcp`, the
   `InsightUiWebmcp` import, and `window.InsightUiWebmcp` from a script tag.
   The packages-at-a-glance diagram shows the same `register.js` runtime from

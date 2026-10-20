@@ -16,48 +16,49 @@ concurrency:
   group: webmcp-release
   cancel-in-progress: false
 jobs:
-  quality:
-    # ci.yml nests repository-policy (pull-requests: read); a caller that grants
-    # less fails at startup even though that job is skipped off pull_request.
-    permissions:
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/ci.yml
   version:
-    needs: quality
+    needs: source
     uses: alpininsight/.github-private/.github/workflows/gitversion-reusable.yml@main
     with:
       checkout_ref: ${{ github.sha }}
   source:
-    needs: quality
     runs-on: general
     timeout-minutes: 5
     permissions:
       contents: read
-      checks: read
+      actions: read
+      pull-requests: read
     steps:
+      - name: Require main before reading source
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: test "$SOURCE_REF" = refs/heads/main
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Validate explicit publication activation
-        if: inputs.release || inputs.cdn
+      - name: Reuse exact main CI evidence and validate requested activation
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_SHA: ${{ github.sha }}
-          SOURCE_REF: ${{ github.ref }}
+          RELEASE_REQUESTED: ${{ inputs.release }}
           ENABLED: ${{ vars.WEBMCP_PYPI_PUBLISH_ENABLED }}
           CDN_REQUESTED: ${{ inputs.cdn }}
           CDN_ENABLED: ${{ vars.WEBMCP_CDN_PUBLISH_ENABLED }}
         run: |
-          test "$SOURCE_REF" = refs/heads/main
-          test "$ENABLED" = true
-          if test "$CDN_REQUESTED" = true; then
-            test "$CDN_ENABLED" = true
+          set --
+          if [ "$RELEASE_REQUESTED" = true ] || [ "$CDN_REQUESTED" = true ]; then
+            test "$ENABLED" = true
+            if [ "$CDN_REQUESTED" = true ]; then
+              test "$CDN_ENABLED" = true
+            fi
+            set -- --require-merged-pr
           fi
-          python3 scripts/check_publication.py source --repository "$SOURCE_REPOSITORY" --sha "$SOURCE_SHA"
+          python3 scripts/check_publication.py source --repository "$SOURCE_REPOSITORY" --sha "$SOURCE_SHA" "$@"
+  # Only the separate, explicitly requested CDN contract needs a local delivery.
   build:
+    if: inputs.cdn
     needs: [source, version]
     runs-on: general
     timeout-minutes: 20
@@ -88,7 +89,7 @@ jobs:
           retention-days: 14
   release:
     if: inputs.release
-    needs: [quality, source, version, build]
+    needs: [source, version]
     permissions:
       contents: write
     uses: alpininsight/.github-private/.github/workflows/reusable-release.yml@main
@@ -114,9 +115,13 @@ jobs:
             printf 'Release %s on %s (version %s).\n\n' "$RELEASE_TAG" "$SOURCE_SHA" "$PACKAGE_VERSION"
             printf 'Core PyPI publication runs in alpininsight/.github-private:\n\n'
             printf '```bash\n'
-            for workflow in ais-webmcp-publish-python.yml; do
-              printf 'gh workflow run %s --repo alpininsight/.github-private --ref main -f source_sha=%s -F publish=false\n' "$workflow" "$SOURCE_SHA"
-            done
+            printf 'gh workflow run ais-webmcp-publish-python.yml --repo alpininsight/.github-private --ref main -f source_sha=%s -F publish=false\n' "$SOURCE_SHA"
+            printf '```\n\n'
+            printf 'Wait for the build-only run to succeed. Read its exact run ID, attempt and immutable artifact ID into PRODUCER_RUN_ID, PRODUCER_ATTEMPT and ARTIFACT_ID; the manifest must be schema 3.\n\n'
+            printf 'After publication approval, reuse that successful producer without rebuilding:\n\n```bash\n'
+            # Shell variables in the printed command are filled by the operator.
+            # shellcheck disable=SC2016
+            printf 'gh workflow run ais-webmcp-publish-python.yml --repo alpininsight/.github-private --ref main -f source_sha=%s -F publish=true -f producer_run_id="${PRODUCER_RUN_ID:?}" -f producer_attempt="${PRODUCER_ATTEMPT:?}" -f artifact_id="${ARTIFACT_ID:?}"\n' "$SOURCE_SHA"
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
   # CDN only after the core PyPI project carry exactly these (reproducible) files.
