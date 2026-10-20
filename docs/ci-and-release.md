@@ -39,6 +39,10 @@ The source `release.yml` accepts only the current protected `main` revision,
 including when `release=false`. It validates the latest exact-SHA **push** run of
 `ci.yml`, its repository, attempt, completed/success result and unique successful
 Quality Gate. A PR/dispatch run or an older green attempt cannot substitute for it.
+Every validator job explicitly provisions Python 3.14 with pinned `setup-uv` and
+runs its standard-library-only validator through `uv run --no-project`. General
+runners need no system `python3`, project dependency sync or nested test matrix.
+The optional CDN readback jobs own the same runtime prerequisite independently.
 GitVersion runs after this validation. Actual release creation additionally needs
 the existing activation flag and an exact merged promotion PR into main.
 
