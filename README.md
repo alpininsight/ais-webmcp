@@ -198,3 +198,8 @@ See [the implementation tracker](https://github.com/alpininsight/insight-ui-webm
 for the architecture decision, adapter/publisher/host migration and separate
 release evidence. The original repository history and existing host pins are
 preserved.
+
+## CI and Python release
+
+See [CI and release evidence](docs/ci-and-release.md) for code versus metadata
+checks, Main CI reuse and the central build-once Python publication handoff.
