@@ -24,19 +24,89 @@ def api(path):
     return json.loads(subprocess.check_output(["gh", "api", path], text=True))
 
 
-def check_source(repository, revision):
+def check_source(repository, revision, *, require_merged_pr=False):
+    """Reuse the latest exact main push evidence, never another event or attempt."""
+    if repository != "alpininsight/ais-webmcp":
+        raise ValueError("source repository does not match this package")
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("source must be a full commit SHA")
     branch = api(f"repos/{repository}/branches/main")
     if not branch["protected"] or branch["commit"]["sha"] != revision:
         raise ValueError("source must still be protected main head")
-    checks = api(f"repos/{repository}/commits/{revision}/check-runs?per_page=100")["check_runs"]
-    gates = sorted((c for c in checks if c["name"] == "WebMCP Quality Gate"), key=lambda c: c["id"])
-    if not gates or gates[-1]["conclusion"] != "success":
-        raise ValueError("latest exact-source WebMCP Quality Gate must succeed")
-    # Owner decision 2026-10-12: release approval is the protected pypi-<project>
-    # environment in .github-private (required reviewer, main only), enforced by
-    # the central publisher. No independent PR review is required here.
+    runs = api(
+        f"repos/{repository}/actions/workflows/ci.yml/runs"
+        f"?branch=main&event=push&head_sha={revision}&per_page=1"
+    ).get("workflow_runs", [])
+    if not runs:
+        raise ValueError("no CI main push run for this exact source SHA")
+    # Do not filter by success: a newer failure/in-flight attempt invalidates it.
+    run = runs[0]
+    if not (
+        run.get("head_sha") == revision
+        and run.get("head_branch") == "main"
+        and run.get("event") == "push"
+        and run.get("path") == ".github/workflows/ci.yml"
+        and (run.get("repository") or {}).get("full_name") == repository
+        and (run.get("head_repository") or {}).get("full_name") == repository
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        and type(run.get("id")) is int
+        and run["id"] > 0
+        and type(run.get("run_attempt")) is int
+        and run["run_attempt"] > 0
+    ):
+        raise ValueError("latest exact-SHA main push CI must have completed successfully")
+    jobs = api(f"repos/{repository}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100")
+    if type(jobs.get("total_count")) is not int or jobs["total_count"] > 100:
+        raise ValueError("CI job inventory exceeds the verified page")
+    gates = [j for j in jobs.get("jobs", []) if j.get("name") == "WebMCP Quality Gate"]
+    if len(gates) != 1:
+        raise ValueError("CI needs exactly one WebMCP Quality Gate job")
+    gate = gates[0]
+    if not (
+        gate.get("head_sha") == revision
+        and gate.get("run_id") == run["id"]
+        and gate.get("run_attempt") == run["run_attempt"]
+        and gate.get("status") == "completed"
+        and gate.get("conclusion") == "success"
+        and type(gate.get("id")) is int
+        and gate["id"] > 0
+    ):
+        raise ValueError("exact-SHA WebMCP Quality Gate must succeed for the latest attempt")
+    if require_merged_pr:
+        require_main_promotion(repository, revision)
+    return {
+        "source_ci_run": run["id"],
+        "source_ci_attempt": run["run_attempt"],
+        "source_quality_job": gate["id"],
+    }
+
+
+def require_main_promotion(repository, revision):
+    """The merged source promotion authorizes the release; approval remains central."""
+    for page in range(1, 21):
+        pulls = api(f"repos/{repository}/commits/{revision}/pulls?per_page=100&page={page}")
+        if not isinstance(pulls, list):
+            raise ValueError("invalid source PR metadata")
+        for summary in pulls:
+            number = summary.get("number")
+            if type(number) is not int or number < 1:
+                raise ValueError("invalid source PR number")
+            pr = api(f"repos/{repository}/pulls/{number}")
+            if (
+                pr.get("number") == number
+                and pr.get("merged") is True
+                and pr.get("state") == "closed"
+                and pr.get("draft") is False
+                and bool(pr.get("merged_at"))
+                and pr.get("merge_commit_sha") == revision
+                and (pr.get("base") or {}).get("ref") == "main"
+                and ((pr.get("base") or {}).get("repo") or {}).get("full_name") == repository
+            ):
+                return
+        if len(pulls) < 100:
+            break
+    raise ValueError("exact source SHA must come from a merged PR into main")
 
 
 def verify_bundle(bundle, revision, version):
@@ -144,7 +214,14 @@ def verify_cdn(bundle, version):
 
 
 def _verify_cdn_object(url, path, expected, immutable, origin):
-    request = urllib.request.Request(url, headers={"Origin": origin})
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Origin": origin,
+            "User-Agent": "AlpinInsight-WebMCP-PublicationVerifier/1.0",
+            "Accept": "*/*",
+        },
+    )
     with urllib.request.urlopen(request, timeout=20) as response:
         if response.status != 200 or response.geturl() != url:
             raise ValueError(f"canonical CDN GET failed: {url}")
@@ -216,6 +293,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("source", "bundle", "index", "cdn"))
     parser.add_argument("--repository")
+    parser.add_argument("--require-merged-pr", action="store_true")
     parser.add_argument("--sha")
     parser.add_argument("--version")
     parser.add_argument("--bundle", type=Path, default=Path("bundle"))
@@ -223,7 +301,11 @@ if __name__ == "__main__":
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     if args.command == "source":
-        check_source(args.repository, args.sha)
+        print(
+            json.dumps(
+                check_source(args.repository, args.sha, require_merged_pr=args.require_merged_pr)
+            )
+        )
     elif args.command == "bundle":
         verify_bundle(args.bundle, args.sha, args.version)
     elif args.command == "cdn":
