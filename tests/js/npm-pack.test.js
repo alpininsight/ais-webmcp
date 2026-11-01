@@ -25,8 +25,9 @@ test("package metadata is the public scoped runtime", () => {
   assert.equal(manifest.private, undefined);
   assert.equal(manifest.license, "Apache-2.0");
   assert.equal(manifest.repository.url, "git+https://github.com/alpininsight/ais-webmcp.git");
-  assert.equal(manifest.homepage, "https://github.com/alpininsight/ais-webmcp#readme");
-  assert.equal(manifest.bugs.url, "https://github.com/alpininsight/ais-webmcp/issues");
+  // Source and issue URLs return once the repository is public.
+  assert.equal(manifest.homepage, "https://insight-ui-webmcp.alpininsight.ai/");
+  assert.equal(manifest.bugs, undefined);
   assert.deepEqual(manifest.publishConfig, { access: "public", provenance: true });
   assert.equal(manifest.main, "./src/ais_webmcp/assets/register.js");
   assert.equal(manifest.types, "./src/ais_webmcp/assets/register.d.ts");

@@ -7,10 +7,7 @@
     "type": "git",
     "url": "git+https://github.com/alpininsight/ais-webmcp.git"
   },
-  "homepage": "https://github.com/alpininsight/ais-webmcp#readme",
-  "bugs": {
-    "url": "https://github.com/alpininsight/ais-webmcp/issues"
-  },
+  "homepage": "https://insight-ui-webmcp.alpininsight.ai/",
   "publishConfig": {
     "access": "public",
     "provenance": true
