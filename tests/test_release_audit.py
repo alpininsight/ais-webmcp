@@ -258,3 +258,132 @@ def test_other_failed_jobs_cannot_be_hidden_by_readback_failure(producer):
     producer["jobs"].append(job)
     with pytest.raises(ValueError, match="unrelated"):
         audit.producer(10, 1, 20, "0.1.1")
+
+
+@pytest.mark.parametrize(
+    ("ids", "version", "message"),
+    [
+        ((0, 1, 20), "0.1.1", "positive integers"),
+        ((10, -1, 20), "0.1.1", "positive integers"),
+        ((10, 1, True), "0.1.1", "positive integers"),
+        ((10, 1, "20"), "0.1.1", "positive integers"),
+        ((10, 1, 20), "0.0.0", "final release"),
+        ((10, 1, 20), "0.1.1-alpha.1", "final release"),
+        ((10, 1, 20), "v0.1.1", "final release"),
+        ((10, 1, 20), "01.1.1", "final release"),
+    ],
+)
+def test_invalid_ids_or_non_final_version_rejected_before_api_access(
+    producer, ids, version, message
+):
+    with pytest.raises(ValueError, match=message):
+        audit.producer(*ids, version)
+    assert producer["source_checks"] == []
+
+
+def test_annotated_tag_is_dereferenced_to_the_producer_commit(producer, monkeypatch):
+    producer["tag"] = {"object": {"type": "tag", "sha": "d" * 40}}
+    fixture_api = audit.api
+
+    def api(path):
+        if path.endswith("/git/tags/" + "d" * 40):
+            return {"object": {"type": "commit", "sha": producer["annotated_target"]}}
+        return fixture_api(path)
+
+    monkeypatch.setattr(audit, "api", api)
+    producer["annotated_target"] = SHA
+    assert audit.producer(10, 1, 20, "0.1.1")["source_sha"] == SHA
+    producer["annotated_target"] = "c" * 40
+    with pytest.raises(ValueError, match="release tag"):
+        audit.producer(10, 1, 20, "0.1.1")
+
+
+@pytest.mark.parametrize("total_count", [0, 99, "6", None])
+def test_incomplete_or_paginated_job_listing_rejected(producer, monkeypatch, total_count):
+    fixture_api = audit.api
+
+    def api(path):
+        result = fixture_api(path)
+        if path.endswith("/attempts/1/jobs?per_page=100"):
+            result["total_count"] = total_count
+        return result
+
+    monkeypatch.setattr(audit, "api", api)
+    with pytest.raises(ValueError, match="one complete verified page"):
+        audit.producer(10, 1, 20, "0.1.1")
+
+
+@pytest.mark.parametrize("missing", ["started_at", "completed_at"])
+def test_missing_build_timestamps_rejected(producer, missing):
+    build = next(job for job in producer["jobs"] if job["name"] == "build")
+    del build[missing]
+    with pytest.raises(ValueError, match="complete producer build timestamps"):
+        audit.producer(10, 1, 20, "0.1.1")
+
+
+def test_missing_artifact_timestamp_rejected(producer):
+    del producer["artifact"]["created_at"]
+    with pytest.raises(ValueError, match="complete producer build timestamps"):
+        audit.producer(10, 1, 20, "0.1.1")
+
+
+def test_archive_symlink_rejected_before_extraction(tmp_path, monkeypatch):
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for name in [
+            "cdn/register.js",
+            "cdn/webmcp-manifest.schema.json",
+            "cdn/inventory.json",
+            "dist/ais_webmcp-0.1.1-py3-none-any.whl",
+        ]:
+            archive.writestr(name, b"fixture")
+        link = zipfile.ZipInfo("dist/ais_webmcp-0.1.1.tar.gz")
+        link.external_attr = 0o120777 << 16
+        archive.writestr(link, "/etc/passwd")
+    data = output.getvalue()
+    monkeypatch.setattr(audit.subprocess, "check_output", lambda cmd: data)
+    evidence = {
+        "artifact_id": 20,
+        "version": "0.1.1",
+        "artifact_digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+    }
+    bundle = tmp_path / "bundle"
+    with pytest.raises(ValueError, match="symlinks rejected"):
+        audit.download_delivery(evidence, bundle)
+    assert not bundle.exists()
+
+
+def test_cli_writes_the_read_only_audit_report(producer, monkeypatch, tmp_path):
+    import json
+    import runpy
+    import types
+
+    data = archive_bytes()
+    producer["artifact"]["digest"] = "sha256:" + hashlib.sha256(data).hexdigest()
+    stub = types.ModuleType("check_publication")
+    stub.api = audit.api
+    stub.check_source = lambda *args, **kwargs: None
+    stub.verify_bundle = lambda *args: None
+    stub.verify_index = lambda *args: None
+    stub.verify_cdn = lambda *args: ["register.js"]
+    monkeypatch.setitem(sys.modules, "check_publication", stub)
+    monkeypatch.setattr("subprocess.check_output", lambda cmd: data)
+    report = tmp_path / "out" / "report.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "audit_cdn_release.py",
+            "--producer-run-id=10",
+            "--producer-attempt=1",
+            "--artifact-id=20",
+            "--version=0.1.1",
+            f"--bundle={tmp_path / 'bundle'}",
+            f"--report={report}",
+        ],
+    )
+    runpy.run_path(str(ROOT / "scripts/audit_cdn_release.py"), run_name="__main__")
+    result = json.loads(report.read_text())
+    assert result["source_sha"] == SHA
+    assert result["objects"] == ["register.js"]
+    assert result["audit_kind"] == "read-only-existing-delivery"
