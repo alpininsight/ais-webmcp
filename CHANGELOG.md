@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Cover the remaining release-audit guards with tests: invalid producer IDs,
+  non-final versions, annotated tags, paginated job listings, missing build
+  timestamps, archive symlinks and the report-writing CLI. The README no longer
+  names the private repository URL in the npm section.
+
 - Separate PR metadata policy checks from code CI, remove duplicate Develop-push
   matrices, and reuse exact Main-push evidence for source releases. Build stable
   Python files once in the central producer and publish the reviewed bundle by

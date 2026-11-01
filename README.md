@@ -174,8 +174,8 @@ A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 The committed npm version is the `0.0.0` placeholder. Publish stamps the
 `vX.Y.Z` tag into `package.json` when the name stays in the
 `@alpininsightsolutions` scope, the license is `Apache-2.0`, the files
-allowlist includes `LICENSE` and `NOTICE`, and the repository URL is
-`git+https://github.com/alpininsight/ais-webmcp.git`. `npm run build:release`
+allowlist includes `LICENSE` and `NOTICE`, and the repository URL matches
+the source repository that npm provenance names. `npm run build:release`
 then injects that version into `register.js`. The workflow packs that build
 and publishes the tarball with provenance. `prepublishOnly` rejects a local
 `npm publish` while the version is still `0.0.0`. Publishing runs from
