@@ -168,6 +168,17 @@ def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
     )
     assert len(install["env"]["GITLEAKS_SHA256"]) == 64
     assert "sha256sum --check --strict" in install["run"]
+    pre_commit = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / ".pre-commit-config.yaml").read_text()
+    )
+    hook_rev = next(
+        repo["rev"] for repo in pre_commit["repos"] if repo["repo"].endswith("/gitleaks")
+    )
+    assert install["env"]["GITLEAKS_VERSION"] == hook_rev.removeprefix("v")
+    assert (
+        install["env"]["GITLEAKS_SHA256"]
+        == "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    )
     for step in WORKFLOW["jobs"]["quality"]["steps"]:
         if step.get("name") == "Run pre-commit":
             assert "GH_TOKEN" not in str(step.get("env", {}))
