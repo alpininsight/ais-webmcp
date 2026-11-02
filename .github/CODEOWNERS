@@ -1,5 +1,4 @@
 # Code owners for alpininsight/ais-webmcp.
 # GitHub requests a review from these owners on every pull request.
-# The organisation teams named in .github-private/.github/CODEOWNERS do not
-# exist yet, so ownership is the maintainer account until a team takes over.
+# The organisation's code-owner teams do not exist yet, so ownership is the maintainer account until a team takes over.
 *    @dkdndes

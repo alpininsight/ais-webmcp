@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Run self-hosted from alpininsight/.github-private (renovate.yml, docs/runbooks/self-hosted-renovate.md). Updates land on develop; develop to main stays a manual promotion.",
+  "description": "Run self-hosted from the organisation's central workflow repository. Updates land on develop; develop to main stays a manual promotion.",
   "extends": [
     "config:recommended"
   ],
@@ -62,7 +62,7 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Reusable workflows and actions from alpininsight/.github-private are adopted through its release and consumer canary, not by Renovate.",
+      "description": "Reusable workflows and actions from the central workflow repository are adopted through its release and consumer canary, not by Renovate.",
       "matchPackageNames": [
         "alpininsight/.github-private"
       ],
@@ -87,7 +87,7 @@
       "enabled": false
     },
     {
-      "description": ".github/workflows/npm-publish.yml must stay byte-identical to templates/npm/npm-publish.yml in alpininsight/.github-private; its pins move there first.",
+      "description": ".github/workflows/npm-publish.yml must stay byte-identical to the central npm publish template; its pins move there first.",
       "matchFileNames": [
         ".github/workflows/npm-publish.yml"
       ],

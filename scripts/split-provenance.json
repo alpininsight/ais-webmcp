@@ -6,7 +6,6 @@
   "filter_tool_revision": "a40bce548d2c",
   "carried_license_fix": "112451709648b21c889283786cf600c1e45b55a4",
   "carried_cdn_readback": "4fcbbab45c436e79fca5b619c642c9fad7449750",
-  "issue": "https://github.com/alpininsight/insight-ui-webmcp/issues/63",
   "filter_paths": [
     "packages/ais-webmcp/",
     "js/",

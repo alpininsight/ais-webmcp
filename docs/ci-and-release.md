@@ -51,11 +51,12 @@ stable wheel/sdist build. `release=true` creates the matching GitHub tag/release
 records a handoff; it does not publish to PyPI. The protected central publisher owns
 the stable wheel/sdist build and independent installation tests.
 
-After the source release, run the central build-only producer:
+After the source release, run the build-only producer workflow in the
+organisation's central publishing repository (set `PUBLISHER_REPO` to it):
 
 ```bash
 gh workflow run ais-webmcp-publish-python.yml \
-  --repo alpininsight/.github-private --ref main \
+  --repo "${PUBLISHER_REPO:?}" --ref main \
   -f source_sha="$SOURCE_SHA" -F publish=false
 ```
 
@@ -67,7 +68,7 @@ After publication authorization, request reuse of those same tested files:
 
 ```bash
 gh workflow run ais-webmcp-publish-python.yml \
-  --repo alpininsight/.github-private --ref main \
+  --repo "${PUBLISHER_REPO:?}" --ref main \
   -f source_sha="$SOURCE_SHA" -F publish=true \
   -f producer_run_id="${PRODUCER_RUN_ID:?}" \
   -f producer_attempt="${PRODUCER_ATTEMPT:?}" \
