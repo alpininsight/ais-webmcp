@@ -1,4 +1,9 @@
-"""Audit immutable Actions delivery and public bytes without rebuilding or uploading."""
+"""Audit legacy release.yml deliveries and public bytes without rebuilding or uploading.
+
+Release and CDN publication moved to the central private executor. This auditor
+only accepts producer runs of the removed public ``release.yml`` (see
+docs/release-audit.md); executor runs are verified by the executor itself.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +20,8 @@ from pathlib import Path
 from check_publication import api, check_source, verify_bundle, verify_cdn, verify_index
 
 REPOSITORY = "alpininsight/ais-webmcp"
+# Removed workflow; only its historical runs can be audited here.
+LEGACY_PRODUCER_WORKFLOW = ".github/workflows/release.yml"
 REQUIRED_JOBS = {"source", "build", "pypi-verified", "cdn / Static Assets", "cdn / CDN Upload"}
 
 
@@ -32,7 +39,7 @@ def producer(run_id, attempt, artifact_id, version):
         run.get("id") == run_id
         and run.get("run_attempt") == attempt
         and run.get("event") == "workflow_dispatch"
-        and run.get("path") == ".github/workflows/release.yml"
+        and run.get("path") == LEGACY_PRODUCER_WORKFLOW
         and run.get("head_branch") == "main"
         and re.fullmatch(r"[0-9a-f]{40}", revision)
         and (run.get("repository") or {}).get("full_name") == REPOSITORY

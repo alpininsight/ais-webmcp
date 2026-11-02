@@ -100,6 +100,8 @@ def test_failed_readback_with_successful_upload_can_be_audited(producer):
         ("run_attempt", 2),
         ("event", "pull_request"),
         ("path", ".github/workflows/cdn-develop.yml"),
+        ("path", ".github/workflows/ci.yml"),
+        ("path", ".github/workflows/ais-webmcp-release-assets.yml"),
         ("head_branch", "develop"),
         ("head_sha", "not-a-sha"),
         ("repository", {"full_name": "other/repository"}),
@@ -364,3 +366,8 @@ def test_cli_writes_the_read_only_audit_report(producer, monkeypatch, tmp_path):
     assert result["source_sha"] == SHA
     assert result["objects"] == ["register.js"]
     assert result["audit_kind"] == "read-only-existing-delivery"
+
+
+def test_only_the_removed_release_workflow_is_a_legacy_producer():
+    assert audit.LEGACY_PRODUCER_WORKFLOW == ".github/workflows/release.yml"
+    assert not (ROOT / audit.LEGACY_PRODUCER_WORKFLOW).exists()

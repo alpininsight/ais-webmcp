@@ -7,6 +7,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -184,6 +185,40 @@ def test_release_and_cdn_run_in_the_central_executor():
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
     push = ci.get("on", ci.get(True))["push"]["branches"]
     assert set(push) == {"develop", "main"}
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        {},
+        {"ais_webmcp-1.2.3-py3-none-any.whl": "0" * 64},
+        "extra",
+    ],
+)
+def test_registry_readback_is_exact(monkeypatch, tmp_path, remote):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    digests = {}
+    for name in (
+        "ais_webmcp-1.2.3-py3-none-any.whl",
+        "ais_webmcp-1.2.3.tar.gz",
+    ):
+        (dist / name).write_bytes(name.encode())
+        digests[name] = hashlib.sha256(name.encode()).hexdigest()
+
+    def urlopen(url, timeout):
+        project = "ais_webmcp" if "/ais-webmcp/" in url else "insight_ui_webmcp"
+        files = {k: v for k, v in digests.items() if k.startswith(project + "-")}
+        if remote == "extra":
+            files[f"{project}-1.2.3-py2-none-any.whl"] = "1" * 64
+        elif project == "ais_webmcp":
+            files = remote
+        payload = {"urls": [{"filename": k, "digests": {"sha256": v}} for k, v in files.items()]}
+        return io.BytesIO(json.dumps(payload).encode())
+
+    monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
+    with pytest.raises(ValueError):
+        publication.verify_index(tmp_path, "1.2.3")
 
 
 def test_registry_readback_accepts_exact_match(monkeypatch, tmp_path):
