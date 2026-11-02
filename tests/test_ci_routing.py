@@ -1,6 +1,7 @@
 """Execute the workflow routing and gates without GitHub or publication credentials."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -168,12 +169,22 @@ def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
     )
     assert len(install["env"]["GITLEAKS_SHA256"]) == 64
     assert "sha256sum --check --strict" in install["run"]
+    assert (
+        install["env"]["GITLEAKS_SHA256"]
+        == "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    )
+    for step in WORKFLOW["jobs"]["quality"]["steps"]:
+        if step.get("name") == "Run pre-commit":
+            assert "GH_TOKEN" not in str(step.get("env", {}))
+    root = Path(__file__).resolve().parents[1]
+    if shutil.which("git") is None or not (root / ".git").exists():
+        pytest.skip("needs a git checkout (not available in an sdist)")
     # CI strips the gitleaks hook from the working copy before pre-commit runs,
     # so compare against the committed config.
     pre_commit = yaml.safe_load(
         subprocess.run(
             ["git", "show", "HEAD:.pre-commit-config.yaml"],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=root,
             check=True,
             capture_output=True,
             text=True,
@@ -183,10 +194,3 @@ def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
         repo["rev"] for repo in pre_commit["repos"] if repo["repo"].endswith("/gitleaks")
     )
     assert install["env"]["GITLEAKS_VERSION"] == hook_rev.removeprefix("v")
-    assert (
-        install["env"]["GITLEAKS_SHA256"]
-        == "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
-    )
-    for step in WORKFLOW["jobs"]["quality"]["steps"]:
-        if step.get("name") == "Run pre-commit":
-            assert "GH_TOKEN" not in str(step.get("env", {}))
