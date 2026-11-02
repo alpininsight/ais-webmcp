@@ -82,13 +82,13 @@ explicitly enables and implements them.
 
 ## Output schemas
 
-`outputSchema` is an optional extension by Alpin Insight Solutions, modelled
-on MCP `Tool.outputSchema`. It is part of the WebMCP draft specification
-since
+`outputSchema` is part of the WebMCP draft specification since
 [webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)
 (merged 2026-11-02, closing
-[webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9)).
-Browser support may lag behind the draft; `ais-webmcp` uses it for validation.
+[webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9)),
+modelled on MCP `Tool.outputSchema`. `ais-webmcp` supports and validates it;
+a missing schema is reported as a low-severity hint. Browser support may lag
+behind the draft.
 
 Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
 for each tool result next to its input schema. The canonical key is
