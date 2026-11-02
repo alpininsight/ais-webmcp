@@ -25,7 +25,9 @@ test("package metadata is the public scoped runtime", () => {
   assert.equal(manifest.private, undefined);
   assert.equal(manifest.license, "Apache-2.0");
   assert.equal(manifest.repository.url, "git+https://github.com/alpininsight/ais-webmcp.git");
-  assert.equal(manifest.homepage, "https://github.com/alpininsight/ais-webmcp#readme");
+  // The first npm publish needs a public repository (provenance), so the
+  // explicit issue tracker URL is public when the package page goes live.
+  assert.equal(manifest.homepage, "https://insight-ui-webmcp.alpininsight.ai/");
   assert.equal(manifest.bugs.url, "https://github.com/alpininsight/ais-webmcp/issues");
   assert.deepEqual(manifest.publishConfig, { access: "public", provenance: true });
   assert.equal(manifest.main, "./src/ais_webmcp/assets/register.js");

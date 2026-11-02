@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Point the npm `homepage` at https://insight-ui-webmcp.alpininsight.ai/.
+  The `bugs` URL stays explicit (the GitHub issue tracker) so npm does not
+  derive it on its own; the repository is public before the first npm
+  publish, which provenance requires anyway.
+
 - Cover the remaining release-audit guards with tests: invalid producer IDs,
   non-final versions, annotated tags, paginated job listings, missing build
   timestamps, archive symlinks and the report-writing CLI. The README no longer
