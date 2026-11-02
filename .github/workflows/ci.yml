@@ -505,7 +505,7 @@ jobs:
   gate:
     # Metadata must verify a real full producer, never infer success from skipped tests.
     name: WebMCP Quality Gate
-    needs: [classify, repository-policy, quality-gate, compatibility, assets, npm-pack]
+    needs: [classify, repository-policy, quality, gitleaks, compatibility, assets, npm-pack]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -546,8 +546,8 @@ jobs:
           MODE: ${{ needs.classify.outputs.mode }}
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           EVIDENCE_RESULT: ${{ steps.evidence.outcome }}
-          EXPECTED_CONTRACTS: '4'
-          CONTRACT_RESULTS: ${{ needs.quality-gate.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
+          EXPECTED_CONTRACTS: '5'
+          CONTRACT_RESULTS: ${{ needs.quality.result }} ${{ needs.gitleaks.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
         run: |
           test "$CLASSIFY_RESULT" = success
           read -r -a results <<< "$CONTRACT_RESULTS"
