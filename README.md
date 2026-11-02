@@ -22,8 +22,8 @@ Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
   ([draft specification](https://webmachinelearning.github.io/webmcp/)). It is
   not a W3C Standard and is not on the W3C Standards Track. This package
   targets the `document.modelContext` API only.
-- The browser runtime is also published on npm as
-  `@alpininsightsolutions/webmcp`, starting with version 0.1.2.
+- The browser runtime is prepared as the npm package
+  `@alpininsightsolutions/webmcp`; its first npm release is still pending.
 
 ## Background
 
@@ -83,12 +83,12 @@ explicitly enables and implements them.
 ## Output schemas
 
 `outputSchema` is an optional extension by Alpin Insight Solutions, modelled
-on MCP `Tool.outputSchema`. It is not part of the WebMCP specification yet:
-adding it is an open proposal
-([webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9),
-specification PR
-[webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)).
-Browsers currently ignore the field; `ais-webmcp` uses it for validation.
+on MCP `Tool.outputSchema`. It is part of the WebMCP draft specification
+since
+[webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)
+(merged 2026-11-02, closing
+[webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9)).
+Browser support may lag behind the draft; `ais-webmcp` uses it for validation.
 
 Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
 for each tool result next to its input schema. The canonical key is
@@ -133,11 +133,13 @@ copy.
 
 ## npm package
 
-The browser runtime is published as the public npm package
-`@alpininsightsolutions/webmcp` (from version 0.1.2, the same version as the
-Python package). The tarball contains only the built `register.js`, its
+The browser runtime is prepared as the public npm package
+`@alpininsightsolutions/webmcp`; the first npm release is pending. Once
+published, its version matches the Python package. The tarball contains only the built `register.js`, its
 types, this README, `LICENSE`, and `NOTICE` (`package.json` is included
 because npm always packs it). A tarball guard in CI rejects any other path.
+
+Once published:
 
 ```bash
 npm install @alpininsightsolutions/webmcp
