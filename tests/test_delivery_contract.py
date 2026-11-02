@@ -297,3 +297,13 @@ def test_registry_readback_accepts_exact_match(monkeypatch, tmp_path):
 
     monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
     publication.verify_index(tmp_path, "1.2.3")
+
+
+def test_public_docs_do_not_link_private_repositories():
+    """NOTICE and the release runbook stay free of private repository links."""
+    notice = (ROOT / "NOTICE").read_text()
+    assert "github.com/alpininsight/insight-ui-webmcp" not in notice
+    assert "https://insight-ui-webmcp.alpininsight.ai" in notice
+    runbook = (ROOT / "docs/ci-and-release.md").read_text()
+    assert "alpininsight/.github-private" not in runbook
+    assert "ais-webmcp-publish-python.yml" in runbook
