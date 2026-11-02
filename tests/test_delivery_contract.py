@@ -153,7 +153,8 @@ def test_npm_publish_runs_in_this_repository():
         assert re.search(r"npm-v(?!ersion)", doc) is None
         assert re.search(r"\bR2\b", doc) is None
         assert re.search(r"\bk8s\b", doc) is None
-        assert re.search(r"\b[a-z0-9-]+#[0-9]+\b", doc.replace("webmcp#", "")) is None
+        public_spec_refs = re.sub(r"\bwebmachinelearning/webmcp#[0-9]+\b", "", doc)
+        assert re.search(r"[A-Za-z0-9_.-]+#[0-9]+\b", public_spec_refs) is None
 
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
     guard = ci["jobs"]["npm-pack"]
