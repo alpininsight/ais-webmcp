@@ -22,7 +22,7 @@ classifiers = [
 dependencies = ["jsonschema>=4.23,<5", "pyyaml>=6.0.2,<7"]
 
 [project.urls]
-# Source/Issues URLs return once the repository is public (insight-ui-webmcp-docs#34).
+# Source/Issues URLs are added once the repository is public.
 Homepage = "https://insight-ui-webmcp.alpininsight.ai/"
 Documentation = "https://insight-ui-webmcp.alpininsight.ai/"
 
