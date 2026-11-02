@@ -168,8 +168,16 @@ def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
     )
     assert len(install["env"]["GITLEAKS_SHA256"]) == 64
     assert "sha256sum --check --strict" in install["run"]
+    # CI strips the gitleaks hook from the working copy before pre-commit runs,
+    # so compare against the committed config.
     pre_commit = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / ".pre-commit-config.yaml").read_text()
+        subprocess.run(
+            ["git", "show", "HEAD:.pre-commit-config.yaml"],
+            cwd=Path(__file__).resolve().parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
     )
     hook_rev = next(
         repo["rev"] for repo in pre_commit["repos"] if repo["repo"].endswith("/gitleaks")
