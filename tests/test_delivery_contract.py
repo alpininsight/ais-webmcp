@@ -106,15 +106,37 @@ def test_npm_publish_runs_in_this_repository():
 
     readme = (ROOT / "README.md").read_text()
     release_doc = (ROOT / "docs/release.md").read_text()
+    # The maintainer process (workflow, environment, approval) lives in
+    # docs/release.md. The README is the public PyPI/npm page.
+    assert "npm-publish.yml" in release_doc
+    assert "npm-ais-webmcp" in release_doc
+    assert "alpininsight/ais-webmcp" in release_doc
+    assert "release owner's go" in release_doc
+    assert "manual bootstrap" in release_doc
+    assert "build:release" in release_doc
+    assert "Peter" not in release_doc
+    assert "Trusted Publishing" in readme
+    assert "provenance" in readme
+    assert "docs/release.md" in readme
+    assert "npm install @alpininsightsolutions/webmcp" in readme
+    assert "not yet published" not in readme
+    for forbidden in (
+        # Internal names: people, environments, private repos, hosts, paths.
+        "Peter",
+        "npm-ais-webmcp",
+        "webmcp_check",
+        "insight-ui-webmcp/",
+        "insight-ui-webmcp.git",
+        "github.com/alpininsight/insight-ui",
+        "enterprise",
+        "Enterprise",
+        "secret/",
+        "svc.cluster.local",
+    ):
+        assert forbidden not in readme, forbidden
     for doc in (readme, release_doc):
-        assert "npm-publish.yml" in doc
-        assert "npm-ais-webmcp" in doc
-        assert "alpininsight/ais-webmcp" in doc
-        assert "Peter's go" in doc
         assert "Trusted Publishing" in doc
         assert "provenance" in doc
-        assert "manual bootstrap" in doc
-        assert "build:release" in doc
         for forbidden in (
             "npm-publish-reusable.yml",
             ".github-private",
@@ -131,6 +153,8 @@ def test_npm_publish_runs_in_this_repository():
         assert re.search(r"npm-v(?!ersion)", doc) is None
         assert re.search(r"\bR2\b", doc) is None
         assert re.search(r"\bk8s\b", doc) is None
+        public_spec_refs = re.sub(r"\bwebmachinelearning/webmcp#[0-9]+\b", "", doc)
+        assert re.search(r"[A-Za-z0-9_.-]+#[0-9]+\b", public_spec_refs) is None
 
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
     guard = ci["jobs"]["npm-pack"]
