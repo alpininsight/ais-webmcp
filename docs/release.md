@@ -15,7 +15,7 @@ runs `npm run build:release`, packs the tarball, and runs
 Trusted Publishing attaches provenance. No npm token. The trusted publisher
 is bound to GitHub repository `alpininsight/ais-webmcp`, workflow filename
 `npm-publish.yml`, and environment `npm-ais-webmcp`. A release goes out only
-with Peter's go. The first publish is the manual bootstrap from `main`.
+with the release owner's go. The first publish is the manual bootstrap from `main`.
 
 ## Version
 
@@ -33,7 +33,7 @@ builds `register.js` from that version.
 
 ## One-time setup on npmjs.com
 
-Owner: Peter. Publish only with Peter's go.
+Owner: the release owner (maintainer). Publish only with the release owner's go.
 
 1. Sign in at [npmjs.com](https://www.npmjs.com) as an owner of the
    `alpininsightsolutions` organization. Create that organization if it does
@@ -54,7 +54,7 @@ Owner: Peter. Publish only with Peter's go.
    npm token. The publish job sets that environment.
 4. Do not create an npm automation token or granular access token. The first
    publish is the manual bootstrap: run `npm-publish.yml` with
-   `workflow_dispatch` from `main`, and only with Peter's go.
+   `workflow_dispatch` from `main`, and only with the release owner's go.
 
 ## Enterprise code never goes to npm
 
