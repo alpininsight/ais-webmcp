@@ -214,28 +214,6 @@ def test_audit_pipeline_checks_provenance_and_pypi_before_public_cdn(
     assert result["audit_kind"] == "read-only-existing-delivery"
 
 
-def test_audit_mode_cannot_reach_preview_publisher_or_write_credentials():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/cdn-develop.yml").read_text())
-    trigger = workflow.get("on", workflow.get(True))["workflow_dispatch"]
-    assert trigger["inputs"]["mode"]["default"] == "preview"
-    assert trigger["inputs"]["mode"]["options"] == ["preview", "release-audit"]
-    for name in ("quality", "version", "cdn"):
-        assert "inputs.mode == 'preview'" in workflow["jobs"][name]["if"]
-    assert "vars.WEBMCP_CDN_PUBLISH_ENABLED == 'true'" in workflow["jobs"]["quality"]["if"]
-    job = workflow["jobs"]["release-audit"]
-    assert job["if"] == "inputs.mode == 'release-audit' && github.ref == 'refs/heads/develop'"
-    assert job["permissions"] == {
-        "contents": "read",
-        "actions": "read",
-        "pull-requests": "read",
-    }
-    assert "needs" not in job and "uses" not in job and "secrets" not in job
-    text = str(job)
-    assert "R2_" not in text and "secrets." not in text
-    assert "build_delivery.py" not in text and "uv sync" not in text
-    assert "static-assets-reusable" not in text and "publish=true" not in text
-
-
 def test_failed_pypi_readback_cannot_reach_cdn(producer, monkeypatch, tmp_path):
     monkeypatch.setattr(audit, "download_delivery", lambda *args: None)
     monkeypatch.setattr(audit, "verify_bundle", lambda *args: None)

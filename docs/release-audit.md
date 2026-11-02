@@ -6,15 +6,12 @@ publication verifier identifies itself as
 canonical URL in full. It does not imitate a browser, use challenge cookies, or
 relax status, redirect, content, CORS, or cache checks.
 
-If a release upload completed but its final public readback failed, use the
-existing `cdn-develop.yml` workflow on `develop` with `mode=release-audit`.
-Supply the original `producer_run_id`, `producer_attempt`, immutable
-`artifact_id`, and published `version` without a leading `v`.
-
-This mode skips every preview quality, version, and publication job. It needs
-only repository read permissions; it does not build packages, upload PyPI or
-CDN objects, read R2 credentials, or change edge configuration. The default
-`preview` mode and its existing activation flag remain unchanged.
+The former `cdn-develop.yml` workflow with `mode=release-audit` was removed together
+with `release.yml` (see `docs/ci-and-release.md`). `scripts/audit_cdn_release.py`
+remains for producer runs of the removed `release.yml` and can be run locally with
+`--producer-run-id`, `--producer-attempt`, `--artifact-id` and `--version` (without a
+leading `v`). It needs only repository read permissions; it does not build packages,
+upload PyPI or CDN objects, read R2 credentials, or change edge configuration.
 
 The auditor requires the exact completed main release workflow and attempt,
 current protected main source and matching release tag, successful source,

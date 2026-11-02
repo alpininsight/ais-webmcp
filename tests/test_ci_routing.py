@@ -17,7 +17,7 @@ METADATA = (
 
 def test_events_and_concurrency_preserve_main_and_isolate_metadata():
     events = WORKFLOW.get("on", WORKFLOW.get(True))
-    assert events["push"]["branches"] == ["main"]
+    assert events["push"]["branches"] == ["develop", "main"]
     assert set(events["pull_request"]["types"]) == {
         "opened",
         "synchronize",
