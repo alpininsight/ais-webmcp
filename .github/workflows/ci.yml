@@ -374,8 +374,6 @@ jobs:
           ' .pre-commit-config.yaml > "$RUNNER_TEMP/pre-commit-config.yaml"
           mv "$RUNNER_TEMP/pre-commit-config.yaml" .pre-commit-config.yaml
       - name: Run pre-commit
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: SKIP=no-commit-to-branch uv run --locked pre-commit run --all-files
       - name: Lint
         run: uv run --locked ruff check src tests scripts
@@ -398,12 +396,15 @@ jobs:
       - name: Install Gitleaks
         env:
           GITLEAKS_VERSION: 8.30.0
+          # sha256 from the official gitleaks_8.30.0_checksums.txt release asset.
+          GITLEAKS_SHA256: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
           asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}"
           curl --fail --location --retry 4 --retry-all-errors --retry-delay 2 "$url" -o /tmp/gitleaks.tar.gz
+          printf '%s  %s\n' "$GITLEAKS_SHA256" /tmp/gitleaks.tar.gz | sha256sum --check --strict -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           install -m 755 /tmp/gitleaks "$HOME/.local/bin/gitleaks"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -514,10 +515,12 @@ jobs:
       actions: read
       pull-requests: read
     steps:
+      # Run the evidence checker from the trusted base revision; a PR cannot alter it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: needs.classify.outputs.mode == 'metadata'
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: needs.classify.outputs.mode == 'metadata'
@@ -537,7 +540,7 @@ jobs:
           CI_GATE: 'WebMCP Quality Gate'
           CI_CONTRACTS: '["quality / Quality (3.12)", "quality / Quality (3.13)", "quality / Quality (3.14)", "quality / Quality Gate", "quality / Gitleaks", "Minimum supported dependencies", "assets / Static Assets", "npm tarball guard"]'
         run: |
-          uv run --no-project --python 3.14 python scripts/check_ci_evidence.py \
+          uv run --no-project --python 3.14 python base/scripts/check_ci_evidence.py \
             --repository "$CI_REPOSITORY" --pr "$CI_PR" --head "$CI_HEAD" \
             --base "$CI_BASE" --base-ref "$CI_BASE_REF" --gate "$CI_GATE" \
             --contracts "$CI_CONTRACTS" --summary "$GITHUB_STEP_SUMMARY"
