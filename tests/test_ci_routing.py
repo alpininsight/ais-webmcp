@@ -131,7 +131,11 @@ def test_metadata_quality_gate_requires_explicit_full_evidence():
     assert gate["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
     evidence = next(step for step in gate["steps"] if step.get("id") == "evidence")
     assert evidence["if"] == "needs.classify.outputs.mode == 'metadata'"
-    assert "check_ci_evidence.py" in evidence["run"]
+    assert "base/scripts/check_ci_evidence.py" in evidence["run"]
+    checkout = next(step for step in gate["steps"] if "actions/checkout@" in step.get("uses", ""))
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.base.sha }}"
+    assert checkout["with"]["path"] == "base"
+    assert checkout["with"]["persist-credentials"] is False
     assert "--summary" in evidence["run"]
     assert not evidence.get("continue-on-error")
     assert WORKFLOW["run-name"] == "${{ " + METADATA + " && 'CI metadata' || 'CI full' }}"
@@ -154,3 +158,16 @@ def test_metadata_gate_cannot_pass_without_verified_evidence(outcome):
         capture_output=True,
     )
     assert result.returncode != 0
+
+
+def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
+    install = next(
+        step
+        for step in WORKFLOW["jobs"]["gitleaks"]["steps"]
+        if step.get("name") == "Install Gitleaks"
+    )
+    assert len(install["env"]["GITLEAKS_SHA256"]) == 64
+    assert "sha256sum --check --strict" in install["run"]
+    for step in WORKFLOW["jobs"]["quality"]["steps"]:
+        if step.get("name") == "Run pre-commit":
+            assert "GH_TOKEN" not in str(step.get("env", {}))

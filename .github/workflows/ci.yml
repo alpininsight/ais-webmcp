@@ -12,9 +12,14 @@ permissions:
 concurrency:
   group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'metadata' || 'full' }}
   cancel-in-progress: true
+# Public repository: contributor CI runs inline on GitHub-hosted runners.
+# Public callers cannot use the private reusable catalog, and self-hosted
+# runner groups do not admit public repositories (open-core standard, step 3;
+# runner role contract). Job and check names match the former reusables so
+# required checks and the metadata evidence contracts stay unchanged.
 jobs:
   classify:
-    runs-on: general
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       mode: ${{ steps.mode.outputs.mode }}
@@ -33,32 +38,416 @@ jobs:
           fi
           printf 'mode=%s\n' "$mode" >> "$GITHUB_OUTPUT"
   repository-policy:
-    # Central policy replaces the previous inline branch script.
+    # Inline copy of the org Repository Policy (defaults). Reads PR metadata
+    # through the API only; executes no repository code.
     # Policy is required separately; title edits must not invalidate tested code.
     if: github.event_name == 'pull_request'
+    name: repository-policy / Repository Policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
-    uses: alpininsight/.github-private/.github/workflows/repository-policy-reusable.yml@main
+    steps:
+      - name: Validate repository policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          MAIN_BRANCH: main
+          DEVELOP_BRANCH: develop
+          ENFORCE_DEVELOP_SOURCE_BRANCH_PREFIXES: 'true'
+          DEVELOP_SOURCE_BRANCH_PREFIX_REGEX: '^(build|chore|ci|dependabot|docs|feat|feature|fix|perf|refactor|renovate|revert|style|test)/.+$'
+          ALLOW_DEVELOP_HISTORY_RECONCILIATION: 'false'
+          DEVELOP_HISTORY_RECONCILIATION_HEAD_REGEX: '^chore/sync-main-into-develop-[0-9]{8}$'
+          REQUIRE_CONVENTIONAL_TITLE: 'true'
+          REQUIRE_CONVENTIONAL_COMMITS: 'true'
+          ALLOW_MAIN_REALIGNMENT_PR: 'false'
+          MAIN_REALIGNMENT_HEAD_REGEX: '^chore/realign-main-with-.+$'
+          ALLOW_MAIN_BOT_PR: 'false'
+          MAIN_BOT_AUTHOR: ''
+          MAIN_BOT_HEAD_REGEX: ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A merge group is a temporary ref that GitHub builds from pull
+          # requests it admitted to the merge queue, and it admits a pull
+          # request only after the required checks passed on it. The route,
+          # title and commit checks below therefore already ran on every pull
+          # request in the group; the group has no head branch or pull-request
+          # metadata of its own to judge. It still has to report: a required
+          # check that never reports stalls the queue, and one that fails ejects
+          # the queued pull requests. So the check verifies only that the queue
+          # targets one of the two protected branches and passes. This relies
+          # on Repository Policy being a required check of that branch.
+          if [[ "${EVENT_NAME:-}" == "merge_group" ]]; then
+            if [[ "${MERGE_GROUP_BASE_REF:-}" != "refs/heads/${MAIN_BRANCH}" && "${MERGE_GROUP_BASE_REF:-}" != "refs/heads/${DEVELOP_BRANCH}" ]]; then
+              printf 'Repository policy failed:\n' >&2
+              printf -- "- Merge group base '%s' is neither 'refs/heads/%s' nor 'refs/heads/%s'.\n" "${MERGE_GROUP_BASE_REF:-}" "$MAIN_BRANCH" "$DEVELOP_BRANCH" >&2
+              exit 1
+            fi
+            {
+              echo "## Repository Policy"
+              echo "- Event: \`merge_group\`"
+              echo "- Merge group base: \`$MERGE_GROUP_BASE_REF\`"
+              echo "- Route, title and commit checks: enforced on each pull request before it entered the queue"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          conventional_regex='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([A-Za-z0-9_.-]+\))?!?: .+'
+          github_merge_commit_regex='^Merge pull request #[0-9]+ from .+'
+          develop_sync_merge_commit_regex="^Merge branch '${DEVELOP_BRANCH}' into .+"
+          develop_remote_sync_merge_commit_regex="^Merge remote-tracking branch 'origin/${DEVELOP_BRANCH}' into .+"
+          repository_owner="${HEAD_REPOSITORY%%/*}"
+          develop_sync_pr_merge_commit_regex="^Merge pull request #[0-9]+ from ${repository_owner}/${DEVELOP_BRANCH}$"
+          failures=()
+          is_release_promotion=false
+          is_main_realignment=false
+          is_develop_history_reconciliation=false
+          allow_develop_sync_merge_headlines=false
+          is_main_bot_pr=false
+
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            failures+=("Repository Policy must run on pull_request or merge_group events.")
+          fi
+
+          # Default-off exception for one GitHub App's generated PRs into main
+          # (for example production digest pins). A misconfigured exception
+          # fails every PR instead of silently admitting nothing.
+          if [[ "$ALLOW_MAIN_BOT_PR" == "true" ]]; then
+            if [[ -z "$MAIN_BOT_AUTHOR" || -z "$MAIN_BOT_HEAD_REGEX" ]]; then
+              failures+=("allow_main_bot_pr requires a non-empty main_bot_author and main_bot_head_regex.")
+            else
+              main_bot_regex_status=0
+              # shellcheck disable=SC2319 # The =~ status is wanted: 2 means the regex does not compile.
+              [[ "" =~ $MAIN_BOT_HEAD_REGEX ]] || main_bot_regex_status=$?
+              if (( main_bot_regex_status == 2 )); then
+                failures+=("main_bot_head_regex is not a valid Bash regular expression: '$MAIN_BOT_HEAD_REGEX'.")
+              fi
+            fi
+          fi
+
+          # Same repository, exact author login, and a regex match that covers
+          # the complete head branch rather than a part of it.
+          main_bot_pr_matches() {
+            [[ "$ALLOW_MAIN_BOT_PR" == "true" && -n "$MAIN_BOT_AUTHOR" && -n "$MAIN_BOT_HEAD_REGEX" ]] || return 1
+            [[ "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" && "${PR_AUTHOR:-}" == "$MAIN_BOT_AUTHOR" ]] || return 1
+            [[ "$HEAD_REF" =~ $MAIN_BOT_HEAD_REGEX ]] || return 1
+            [[ "${BASH_REMATCH[0]}" == "$HEAD_REF" ]]
+          }
+
+          if [[ "$BASE_REF" == "$MAIN_BRANCH" ]]; then
+            if [[ "$HEAD_REF" != "$DEVELOP_BRANCH" || "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]]; then
+              if [[ "$ALLOW_MAIN_REALIGNMENT_PR" == "true" && "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" && -n "$MAIN_REALIGNMENT_HEAD_REGEX" && "$HEAD_REF" =~ $MAIN_REALIGNMENT_HEAD_REGEX ]]; then
+                is_release_promotion=true
+                is_main_realignment=true
+              elif main_bot_pr_matches; then
+                # Not a release promotion: none of the release merge-headline
+                # exceptions apply, and the title and commit checks run as for
+                # any other PR.
+                is_main_bot_pr=true
+              else
+                failures+=("PRs into '$MAIN_BRANCH' must come from '$DEVELOP_BRANCH' in the same repository. Current source is '${HEAD_REPOSITORY}:${HEAD_REF}'.")
+                if [[ "$ALLOW_MAIN_BOT_PR" == "true" ]]; then
+                  failures+=("The bot exception admits only same-repository PRs by '$MAIN_BOT_AUTHOR' whose complete head branch matches '$MAIN_BOT_HEAD_REGEX'; this PR is by '${PR_AUTHOR:-}'.")
+                fi
+              fi
+            else
+              is_release_promotion=true
+            fi
+          fi
+
+          if [[ "$BASE_REF" == "$DEVELOP_BRANCH" && "$HEAD_REF" == "$MAIN_BRANCH" && "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" ]]; then
+            failures+=("PRs from '$MAIN_BRANCH' back into '$DEVELOP_BRANCH' are not allowed.")
+          elif [[ "$BASE_REF" == "$DEVELOP_BRANCH" && "$ENFORCE_DEVELOP_SOURCE_BRANCH_PREFIXES" == "true" ]]; then
+            if [[ "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]]; then
+              failures+=("PRs into '$DEVELOP_BRANCH' must come from a same-repository branch with an approved prefix. Current source is '${HEAD_REPOSITORY}:${HEAD_REF}'.")
+            elif [[ -z "$DEVELOP_SOURCE_BRANCH_PREFIX_REGEX" || ! "$HEAD_REF" =~ $DEVELOP_SOURCE_BRANCH_PREFIX_REGEX ]]; then
+              failures+=("PR head into '$DEVELOP_BRANCH' must match '$DEVELOP_SOURCE_BRANCH_PREFIX_REGEX'. Current source branch is '$HEAD_REF'.")
+            fi
+          fi
+
+          if [[ "$BASE_REF" == "$DEVELOP_BRANCH" && "$ALLOW_DEVELOP_HISTORY_RECONCILIATION" == "true" && "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" && -n "$DEVELOP_HISTORY_RECONCILIATION_HEAD_REGEX" && "$HEAD_REF" =~ $DEVELOP_HISTORY_RECONCILIATION_HEAD_REGEX ]]; then
+            is_develop_history_reconciliation=true
+          fi
+
+          if [[ "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" && ( "$BASE_REF" == "$DEVELOP_BRANCH" || "$is_release_promotion" == "true" ) ]]; then
+            allow_develop_sync_merge_headlines=true
+          fi
+
+          if [[ "$REQUIRE_CONVENTIONAL_TITLE" == "true" && ! "$PR_TITLE" =~ $conventional_regex ]]; then
+            if [[ "$is_release_promotion" == "true" ]]; then
+              failures+=("Release-promotion PR titles must follow Conventional Commits; use 'chore(release): <lowercase subject>'. Current title: '$PR_TITLE'.")
+            else
+              failures+=("PR title must follow Conventional Commits, for example 'feat: add API cache'. Current title: '$PR_TITLE'.")
+            fi
+          fi
+
+          if [[ "$REQUIRE_CONVENTIONAL_COMMITS" == "true" ]]; then
+            commit_headlines_file="$(mktemp)"
+            commit_headlines_error_file="$(mktemp)"
+            commit_headlines_fetched=false
+            for attempt in 1 2 3 4 5; do
+              if gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/commits" \
+                --jq '.[] | [.sha, (.parents | length), (.commit.message | split("\n")[0])] | @tsv' > "$commit_headlines_file" 2> "$commit_headlines_error_file"; then
+                commit_headlines_fetched=true
+                break
+              fi
+              printf 'Unable to fetch PR commit headlines from GitHub on attempt %s/5.\n' "$attempt" >&2
+              sed 's/^/  /' "$commit_headlines_error_file" >&2 || true
+              if (( attempt < 5 )); then
+                sleep $(( attempt * 10 ))
+              fi
+            done
+
+            if [[ "$commit_headlines_fetched" != "true" ]]; then
+              failures+=("Unable to fetch PR commit headlines from GitHub after 5 attempts; failing closed.")
+            else
+              mapfile -t commits < "$commit_headlines_file"
+              if (( ${#commits[@]} == 0 )); then
+                failures+=("GitHub returned no PR commit headlines; failing closed.")
+              fi
+
+              merge_commit_headline_regex='^Merge '
+              for commit in "${commits[@]}"; do
+                sha="${commit%%$'\t'*}"
+                commit_rest="${commit#*$'\t'}"
+                parent_count="${commit_rest%%$'\t'*}"
+                headline="${commit_rest#*$'\t'}"
+                if [[ "$is_main_realignment" == "true" ]]; then
+                  continue
+                fi
+                if [[ "$is_release_promotion" == "true" && "$headline" =~ $github_merge_commit_regex ]]; then
+                  continue
+                fi
+                if [[ "$allow_develop_sync_merge_headlines" == "true" && "$headline" =~ $develop_sync_merge_commit_regex ]]; then
+                  continue
+                fi
+                if [[ "$allow_develop_sync_merge_headlines" == "true" && "$headline" =~ $develop_remote_sync_merge_commit_regex ]]; then
+                  sync_merge_parents=""
+                  sync_merge_error_file="$(mktemp)"
+                  if ! sync_merge_parents="$(gh api "repos/${REPOSITORY}/commits/${sha}" --jq '[.parents[].sha] | @tsv' 2> "$sync_merge_error_file")"; then
+                    failures+=("Unable to verify parents for develop synchronization merge '$headline' ($sha); failing closed.")
+                    sed 's/^/  /' "$sync_merge_error_file" >&2 || true
+                    rm -f "$sync_merge_error_file"
+                    continue
+                  fi
+                  rm -f "$sync_merge_error_file"
+
+                  IFS=$'\t' read -r -a sync_merge_parent_shas <<< "$sync_merge_parents"
+                  if (( ${#sync_merge_parent_shas[@]} != 2 )); then
+                    failures+=("Develop synchronization merge '$headline' ($sha) must have exactly two parents; found ${#sync_merge_parent_shas[@]}.")
+                    continue
+                  fi
+
+                  sync_parent_status=""
+                  sync_parent_error_file="$(mktemp)"
+                  if ! sync_parent_status="$(gh api "repos/${REPOSITORY}/compare/${sync_merge_parent_shas[1]}...${DEVELOP_BRANCH}" --jq '.status' 2> "$sync_parent_error_file")"; then
+                    failures+=("Unable to verify that develop synchronization merge '$headline' ($sha) uses '$DEVELOP_BRANCH' history; failing closed.")
+                    sed 's/^/  /' "$sync_parent_error_file" >&2 || true
+                    rm -f "$sync_parent_error_file"
+                    continue
+                  fi
+                  rm -f "$sync_parent_error_file"
+                  if [[ "$sync_parent_status" != "ahead" && "$sync_parent_status" != "identical" ]]; then
+                    failures+=("Develop synchronization merge '$headline' ($sha) second parent is not in '$DEVELOP_BRANCH' history (compare status: '$sync_parent_status').")
+                    continue
+                  fi
+                  continue
+                fi
+                if [[ "$allow_develop_sync_merge_headlines" == "true" && "$headline" =~ $develop_sync_pr_merge_commit_regex ]]; then
+                  continue
+                fi
+                # Like commitlint's default ignores: a real merge commit (more than one
+                # parent) with a generated "Merge ..." headline is not validated as a
+                # Conventional Commit. Develop synchronization merges above keep their
+                # fail-closed parent verification; single-parent "Merge ..." commits
+                # are still checked.
+                if [[ "$parent_count" =~ ^[0-9]+$ ]] && (( parent_count > 1 )) && [[ "$headline" =~ $merge_commit_headline_regex ]]; then
+                  continue
+                fi
+                if [[ ! "$headline" =~ $conventional_regex ]]; then
+                  if [[ "$is_develop_history_reconciliation" == "true" ]]; then
+                    inheritance_checked=false
+                    inheritance_status=""
+                    inheritance_error_file="$(mktemp)"
+                    for attempt in 1 2 3 4 5; do
+                      if inheritance_status="$(gh api "repos/${REPOSITORY}/compare/${sha}...${MAIN_BRANCH}" --jq '.status' 2> "$inheritance_error_file")"; then
+                        inheritance_checked=true
+                        break
+                      fi
+                      printf 'Unable to verify reconciliation commit %s against %s on attempt %s/5.\n' "$sha" "$MAIN_BRANCH" "$attempt" >&2
+                      sed 's/^/  /' "$inheritance_error_file" >&2 || true
+                      if (( attempt < 5 )); then
+                        sleep $(( attempt * 10 ))
+                      fi
+                    done
+                    rm -f "$inheritance_error_file"
+
+                    if [[ "$inheritance_checked" != "true" ]]; then
+                      failures+=("Unable to verify whether non-Conventional commit '$headline' ($sha) is inherited from '$MAIN_BRANCH'; failing closed.")
+                    elif [[ "$inheritance_status" != "ahead" && "$inheritance_status" != "identical" ]]; then
+                      failures+=("Commit headline must follow Conventional Commits unless it is inherited from '$MAIN_BRANCH' by the audited reconciliation: '$headline'.")
+                    fi
+                  else
+                    failures+=("Commit headline must follow Conventional Commits: '$headline'.")
+                  fi
+                fi
+              done
+            fi
+            rm -f "$commit_headlines_file" "$commit_headlines_error_file"
+          fi
+
+          if (( ${#failures[@]} > 0 )); then
+            printf 'Repository policy failed:\n' >&2
+            printf -- '- %s\n' "${failures[@]}" >&2
+            exit 1
+          fi
+
+          {
+            echo "## Repository Policy"
+            echo "- Event: \`${EVENT_NAME:-}\`"
+            echo "- Base branch: \`$BASE_REF\`"
+            echo "- Head branch: \`$HEAD_REF\`"
+            echo "- Base repository: \`$BASE_REPOSITORY\`"
+            echo "- Head repository: \`$HEAD_REPOSITORY\`"
+            echo "- Enforce develop source branch prefixes: \`$ENFORCE_DEVELOP_SOURCE_BRANCH_PREFIXES\`"
+            echo "- Develop source branch prefix regex: \`$DEVELOP_SOURCE_BRANCH_PREFIX_REGEX\`"
+            echo "- Develop history reconciliation: \`$is_develop_history_reconciliation\`"
+            echo "- Conventional PR title: \`$REQUIRE_CONVENTIONAL_TITLE\`"
+            echo "- Conventional commit headlines: \`$REQUIRE_CONVENTIONAL_COMMITS\`"
+            echo "- Release promotion PR: \`$is_release_promotion\`"
+            echo "- Develop sync merge headline exception: \`$allow_develop_sync_merge_headlines\`"
+            echo "- Main realignment PR: \`$is_main_realignment\`"
+            echo "- Main bot PR: \`$is_main_bot_pr\`"
+          } >> "$GITHUB_STEP_SUMMARY"
   quality:
     needs: classify
     if: needs.classify.outputs.mode == 'full'
-    uses: alpininsight/.github-private/.github/workflows/python-django-quality-reusable.yml@main
-    with:
-      runner_profile: general
-      python_versions: '["3.12", "3.13", "3.14"]'
-      uv_sync_args: --locked --all-groups
-      quality_node_version: '24'
-      skip_heavy_on_changelog_only: false
-      pre_commit_command: SKIP=no-commit-to-branch uv run --locked pre-commit run --all-files
-      lint_command: uv run --locked ruff check src tests scripts
-      format_command: uv run --locked ruff format --check src tests scripts
-      test_command: uv lock --check && uv run --locked pytest
+    name: quality / Quality (${{ matrix.python_version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ['3.12', '3.13', '3.14']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python_version }}
+          enable-cache: false
+      - name: Set up Node.js for quality commands
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Sync dependencies
+        run: uv sync --locked --all-groups
+      - name: Configure isolated pre-commit environment
+        env:
+          PYTHON_VERSION: ${{ matrix.python_version }}
+        run: printf 'PRE_COMMIT_HOME=%s\n' "$RUNNER_TEMP/pre-commit/py${PYTHON_VERSION}" >> "$GITHUB_ENV"
+      - name: Keep Gitleaks out of pre-commit matrix
+        # Gitleaks runs once in its own job below.
+        run: |
+          set -euo pipefail
+          awk '
+            /^  - repo: https:\/\/github.com\/gitleaks\/gitleaks$/ { skip = 1; next }
+            skip && /^  - repo: / { skip = 0 }
+            !skip { print }
+          ' .pre-commit-config.yaml > "$RUNNER_TEMP/pre-commit-config.yaml"
+          mv "$RUNNER_TEMP/pre-commit-config.yaml" .pre-commit-config.yaml
+      - name: Run pre-commit
+        run: SKIP=no-commit-to-branch uv run --locked pre-commit run --all-files
+      - name: Lint
+        run: uv run --locked ruff check src tests scripts
+      - name: Format check
+        run: uv run --locked ruff format --check src tests scripts
+      - name: Tests
+        run: uv lock --check && uv run --locked pytest
+  gitleaks:
+    needs: classify
+    if: needs.classify.outputs.mode == 'full'
+    name: quality / Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.0
+          # sha256 from the official gitleaks_8.30.0_checksums.txt release asset.
+          GITLEAKS_SHA256: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}"
+          curl --fail --location --retry 4 --retry-all-errors --retry-delay 2 "$url" -o /tmp/gitleaks.tar.gz
+          printf '%s  %s\n' "$GITLEAKS_SHA256" /tmp/gitleaks.tar.gz | sha256sum --check --strict -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          install -m 755 /tmp/gitleaks "$HOME/.local/bin/gitleaks"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Run Gitleaks
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Pull requests are gated on the commits they add; other events scan full history.
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -n "${PR_BASE_SHA:-}" ]]; then
+            gitleaks detect --no-banner --redact --source=. --log-opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
+          else
+            gitleaks detect --no-banner --redact --source=.
+          fi
+      - name: Scan the working tree
+        run: gitleaks dir --no-banner --redact .
+  quality-gate:
+    needs: [classify, quality, gitleaks]
+    if: always() && !cancelled() && needs.classify.outputs.mode == 'full'
+    name: quality / Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gate summary
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          GITLEAKS_RESULT: ${{ needs.gitleaks.result }}
+        run: |
+          if [[ "$QUALITY_RESULT" != success ]]; then
+            echo "::error::One or more Python quality matrix jobs failed or were cancelled."
+            exit 1
+          fi
+          if [[ "$GITLEAKS_RESULT" != success ]]; then
+            echo "::error::Gitleaks did not complete successfully."
+            exit 1
+          fi
+          echo "## Python Quality Gate: passed (quality=$QUALITY_RESULT, gitleaks=$GITLEAKS_RESULT)" >> "$GITHUB_STEP_SUMMARY"
   compatibility:
     needs: classify
     if: needs.classify.outputs.mode == 'full'
     name: Minimum supported dependencies
-    runs-on: general
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -81,18 +470,28 @@ jobs:
   assets:
     needs: classify
     if: needs.classify.outputs.mode == 'full'
-    uses: alpininsight/.github-private/.github/workflows/static-assets-reusable.yml@main
-    with:
-      node_version: '24'
-      install_command: npm ci
-      mode: check
-      check_command: npm run check:js-build && npm test
-      upload_cdn: false
+    name: assets / Static Assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install JavaScript tooling
+        run: npm ci
+      - name: Verify generated assets
+        run: npm run check:js-build && npm test
   npm-pack:
     needs: classify
     if: needs.classify.outputs.mode == 'full'
     name: npm tarball guard
-    runs-on: general
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -107,19 +506,21 @@ jobs:
   gate:
     # Metadata must verify a real full producer, never infer success from skipped tests.
     name: WebMCP Quality Gate
-    needs: [classify, repository-policy, quality, compatibility, assets, npm-pack]
+    needs: [classify, repository-policy, quality, gitleaks, compatibility, assets, npm-pack]
     if: always() && !cancelled()
-    runs-on: general
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
       actions: read
       pull-requests: read
     steps:
+      # Run the evidence checker from the trusted base revision; a PR cannot alter it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: needs.classify.outputs.mode == 'metadata'
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: needs.classify.outputs.mode == 'metadata'
@@ -139,7 +540,7 @@ jobs:
           CI_GATE: 'WebMCP Quality Gate'
           CI_CONTRACTS: '["quality / Quality (3.12)", "quality / Quality (3.13)", "quality / Quality (3.14)", "quality / Quality Gate", "quality / Gitleaks", "Minimum supported dependencies", "assets / Static Assets", "npm tarball guard"]'
         run: |
-          uv run --no-project --python 3.14 python scripts/check_ci_evidence.py \
+          uv run --no-project --python 3.14 python base/scripts/check_ci_evidence.py \
             --repository "$CI_REPOSITORY" --pr "$CI_PR" --head "$CI_HEAD" \
             --base "$CI_BASE" --base-ref "$CI_BASE_REF" --gate "$CI_GATE" \
             --contracts "$CI_CONTRACTS" --summary "$GITHUB_STEP_SUMMARY"
@@ -148,8 +549,8 @@ jobs:
           MODE: ${{ needs.classify.outputs.mode }}
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           EVIDENCE_RESULT: ${{ steps.evidence.outcome }}
-          EXPECTED_CONTRACTS: '4'
-          CONTRACT_RESULTS: ${{ needs.quality.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
+          EXPECTED_CONTRACTS: '5'
+          CONTRACT_RESULTS: ${{ needs.quality.result }} ${{ needs.gitleaks.result }} ${{ needs.compatibility.result }} ${{ needs.assets.result }} ${{ needs.npm-pack.result }}
         run: |
           test "$CLASSIFY_RESULT" = success
           read -r -a results <<< "$CONTRACT_RESULTS"

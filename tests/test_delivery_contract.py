@@ -16,11 +16,23 @@ spec.loader.exec_module(publication)
 
 
 def test_ci_uses_central_repository_policy():
-    """Branch routing lives in repository-policy-reusable, not a local script."""
+    """Public repo: the org Repository Policy runs inline on a GitHub-hosted runner.
+
+    Public repositories cannot call the private reusable catalog, so the policy
+    is an inline copy that keeps the required check name.
+    """
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     policy = workflow["jobs"]["repository-policy"]
     assert policy["if"] == "github.event_name == 'pull_request'"
-    assert policy["uses"].endswith("/.github/workflows/repository-policy-reusable.yml@main")
+    assert "uses" not in policy
+    assert policy["name"] == "repository-policy / Repository Policy"
+    assert policy["runs-on"] == "ubuntu-latest"
+    ci_text = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "alpininsight/.github-private" not in ci_text
+    assert "pull_request_target" not in ci_text
+    assert all(job.get("runs-on") == "ubuntu-latest" for job in workflow["jobs"].values()), (
+        "public contributor CI must run on GitHub-hosted runners only"
+    )
     assert "branch-policy" not in workflow["jobs"]
     assert "repository-policy" in workflow["jobs"]["gate"]["needs"]
     callers = {
