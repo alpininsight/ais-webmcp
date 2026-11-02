@@ -217,7 +217,7 @@ def test_registry_readback_is_exact(monkeypatch, tmp_path, remote):
         return io.BytesIO(json.dumps(payload).encode())
 
     monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="registry checksum mismatch"):
         publication.verify_index(tmp_path, "1.2.3")
 
 
