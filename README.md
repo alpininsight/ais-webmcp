@@ -117,6 +117,15 @@ Check engines can treat `missing_output_schema` as a low-severity finding.
 Existing hosts keep validating until they declare output schemas. Text reports
 print `finding:` lines and still start with `ok:` when there are no errors.
 
+Tool names, ids, titles, and descriptions that contain invisible or control
+characters are invalid, as are empty or whitespace-only descriptions. A tool
+description over 750 Unicode code points, a schema description over 500, or a
+parameter name over 128 adds a low finding `oversized_schema_field` and stays
+valid. Every report notes that missing `readOnlyHint`, `destructiveHint`, and
+`openWorldHint` must not be treated as safe. A tool that does not set
+`readOnlyHint` also gets a low finding `hints_not_safety_assurances`.
+Side effects are stored as `consequentialHint`. `registerTool` is unchanged.
+
 For Django and [Insight UI](https://pypi.org/project/insight-ui/) applications,
 add the insight-ui-webmcp adapter. The core owns the shared schema and browser
 runtime; the adapter uses the installed core rather than shipping a second

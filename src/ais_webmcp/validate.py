@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -19,6 +20,38 @@ from jsonschema.exceptions import SchemaError
 
 # Recorded on every result. The validator does not execute tools (issue #11).
 LIFECYCLE_NOTE = "unregister is AbortController / { signal } on registerTool, not unregisterTool"
+# Omitted hints are not assurances. destructiveHint and openWorldHint are the
+# upstream names; this package stores side effects as consequentialHint.
+HINTS_NOT_SAFE_CODE = "hints_not_safety_assurances"
+HINTS_NOT_SAFE_SEVERITY = "low"
+HINTS_NOT_SAFE_MESSAGE = (
+    "Missing hints (readOnlyHint, destructiveHint, openWorldHint) must not be treated as safe. "
+    "Omission is not an assurance. This package stores side effects as consequentialHint "
+    "and does not treat a missing hint as a safe default."
+)
+HINTS_NOTE = HINTS_NOT_SAFE_MESSAGE
+INVISIBLE_OR_CONTROL_MESSAGE = "contains an invisible or control character"
+# Soft maxima in Unicode code points. Tool ids already hard-cap at 128.
+# Oversized fields stay valid so existing hosts are not rejected.
+TOOL_DESCRIPTION_SOFT_MAX = 750
+SCHEMA_DESCRIPTION_SOFT_MAX = 500
+SCHEMA_PROPERTY_NAME_MAX = 128
+OVERSIZED_SCHEMA_FIELD_CODE = "oversized_schema_field"
+OVERSIZED_SCHEMA_FIELD_SEVERITY = "low"
+# Default_Ignorable code points whose general category is not Cc, Cf, or Cs.
+# U+2065 and U+FFF0–U+FFF8 are included because a UTF-16 range check misses them.
+_DEFAULT_IGNORABLE_EXTRA = (
+    (0x034F, 0x034F),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180D),
+    (0x2065, 0x2065),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0xE0100, 0xE01EF),
+)
 
 SCHEMA_KEYS = ("inputSchema", "parameters", "input_schema")
 OUTPUT_SCHEMA_KEYS = ("outputSchema", "output_schema")
@@ -67,6 +100,9 @@ class ValidationFinding:
 
     ``code`` is the stable identifier for callers. ``missing_output_schema`` at
     severity ``low`` means the tool declared no output schema.
+    ``oversized_schema_field`` means a description or parameter name is over
+    the soft maximum. ``hints_not_safety_assurances`` means ``readOnlyHint``
+    was not set, so omitted hints must not be treated as safe.
     """
 
     path: str
@@ -81,13 +117,15 @@ class ValidationResult:
 
     ``ok`` is false only for schema or semantic errors. ``findings`` are
     advisory: a tool with no output schema keeps the manifest valid and adds
-    one ``missing_output_schema`` finding at severity ``low``.
+    one ``missing_output_schema`` finding at severity ``low``. Oversized
+    schema fields and a missing ``readOnlyHint`` are low findings too.
+    ``notes`` always include the abort lifecycle note and the hint-safety note.
     """
 
     ok: bool
     source: str
     issues: tuple[ValidationIssue, ...]
-    notes: tuple[str, ...] = (LIFECYCLE_NOTE,)
+    notes: tuple[str, ...] = (LIFECYCLE_NOTE, HINTS_NOTE)
     fatal: bool = False
     findings: tuple[ValidationFinding, ...] = ()
 
@@ -178,6 +216,79 @@ def _missing_output_schema(path: str) -> ValidationFinding:
     )
 
 
+def _contains_invisible_or_control(text: str) -> bool:
+    """True for controls, format characters, surrogates, and default-ignorable code points."""
+    for char in text:
+        if unicodedata.category(char) in {"Cc", "Cf", "Cs"}:
+            return True
+        code = ord(char)
+        for start, end in _DEFAULT_IGNORABLE_EXTRA:
+            if start <= code <= end:
+                return True
+    return False
+
+
+def _flag_invisible(issues: list[ValidationIssue], path: str, label: str, value: Any) -> None:
+    if isinstance(value, str) and _contains_invisible_or_control(value):
+        issues.append(_issue(path, f"{label} {INVISIBLE_OR_CONTROL_MESSAGE}"))
+
+
+def _oversized(path: str, label: str, length: int, limit: int) -> ValidationFinding:
+    return ValidationFinding(
+        path=path,
+        code=OVERSIZED_SCHEMA_FIELD_CODE,
+        severity=OVERSIZED_SCHEMA_FIELD_SEVERITY,
+        message=f"{label} is {length} code points; soft maximum is {limit}",
+    )
+
+
+def _schema_field_findings(schema: Any, prefix: str, seen: set[int]) -> list[ValidationFinding]:
+    """Flag soft maxima inside an input or output schema. Does not fail the tool."""
+    if isinstance(schema, dict):
+        marker = id(schema)
+        if marker in seen:
+            return []
+        seen.add(marker)
+        found: list[ValidationFinding] = []
+        description = schema.get("description")
+        if isinstance(description, str) and len(description) > SCHEMA_DESCRIPTION_SOFT_MAX:
+            found.append(
+                _oversized(
+                    f"{prefix}.description",
+                    "schema description",
+                    len(description),
+                    SCHEMA_DESCRIPTION_SOFT_MAX,
+                )
+            )
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            for key in properties:
+                if isinstance(key, str) and len(key) > SCHEMA_PROPERTY_NAME_MAX:
+                    found.append(
+                        _oversized(
+                            f"{prefix}.properties.{key}",
+                            "parameter name",
+                            len(key),
+                            SCHEMA_PROPERTY_NAME_MAX,
+                        )
+                    )
+        for key, value in schema.items():
+            if isinstance(value, dict | list):
+                child = f"{prefix}.{key}" if isinstance(key, str) else prefix
+                found.extend(_schema_field_findings(value, child, seen))
+        return found
+    if isinstance(schema, list):
+        marker = id(schema)
+        if marker in seen:
+            return []
+        seen.add(marker)
+        found = []
+        for index, item in enumerate(schema):
+            found.extend(_schema_field_findings(item, f"{prefix}[{index}]", seen))
+        return found
+    return []
+
+
 def _output_schema_checks(
     tool: dict[str, Any], prefix: str
 ) -> tuple[list[ValidationIssue], list[ValidationFinding]]:
@@ -201,6 +312,7 @@ def _output_schema_checks(
     key = present[0]
     if not isinstance(tool[key], dict):
         return [_issue(f"{prefix}.{key}", f"{key} must be a JSON object")], []
+    size_findings = _schema_field_findings(tool[key], f"{prefix}.{key}", set())
     try:
         Draft202012Validator.check_schema(tool[key])
     except SchemaError as exc:
@@ -209,8 +321,8 @@ def _output_schema_checks(
                 f"{prefix}.{key}",
                 f"invalid Draft 2020-12 output schema: {exc.message}",
             )
-        ], []
-    return [], []
+        ], size_findings
+    return [], size_findings
 
 
 def _tool_token(tool: dict[str, Any], index: int) -> str:
@@ -258,10 +370,25 @@ def _semantic_issues(
         name = tool.get("name")
         if not isinstance(name, str) or not name.strip():
             issues.append(_issue(f"{prefix}.name", "missing name"))
+        _flag_invisible(issues, f"{prefix}.name", "name", name)
+        _flag_invisible(issues, f"{prefix}.id", "id", tool.get("id"))
+        _flag_invisible(issues, f"{prefix}.title", "title", tool.get("title"))
 
         description = tool.get("description")
         if not isinstance(description, str) or not description.strip():
-            issues.append(_issue(f"{prefix}.description", "missing description"))
+            issues.append(
+                _issue(f"{prefix}.description", "missing description (empty or whitespace-only)")
+            )
+        elif len(description) > TOOL_DESCRIPTION_SOFT_MAX:
+            findings.append(
+                _oversized(
+                    f"{prefix}.description",
+                    "tool description",
+                    len(description),
+                    TOOL_DESCRIPTION_SOFT_MAX,
+                )
+            )
+        _flag_invisible(issues, f"{prefix}.description", "description", description)
 
         present = [key for key in SCHEMA_KEYS if key in tool]
         if not present:
@@ -292,6 +419,7 @@ def _semantic_issues(
                             f"{prefix}.{key}", f"invalid Draft 2020-12 input schema: {exc.message}"
                         )
                     )
+                findings.extend(_schema_field_findings(tool[key], f"{prefix}.{key}", set()))
 
         output_issues, output_findings = _output_schema_checks(tool, prefix)
         issues.extend(output_issues)
@@ -336,6 +464,17 @@ def _semantic_issues(
                         f"unknown annotation key {key!r}",
                     )
                 )
+        if not (
+            isinstance(annotations, dict) and isinstance(annotations.get("readOnlyHint"), bool)
+        ):
+            findings.append(
+                ValidationFinding(
+                    path=prefix,
+                    code=HINTS_NOT_SAFE_CODE,
+                    severity=HINTS_NOT_SAFE_SEVERITY,
+                    message=HINTS_NOT_SAFE_MESSAGE,
+                )
+            )
 
         if isinstance(annotations, dict):
             declared = tool.get("consequential")

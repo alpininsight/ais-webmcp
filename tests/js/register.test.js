@@ -233,6 +233,41 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(ctx.registerCalls.length, 0);
   });
 
+  it("rejects invisible or control characters in names and descriptions", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const cases = [
+      { description: "Hello\u200bworld" },
+      { description: "Hello\u202eworld" },
+      { description: "Hello\u2065world" },
+      { description: "Hello\u{E0001}world" },
+      { title: "Probe\u200b" },
+      { id: "pro\u0007be", name: "Probe" },
+    ];
+    for (const extra of cases) {
+      const result = await api.registerTool({
+        inputSchema: { type: "object" },
+        id: "probe",
+        name: "Probe",
+        description: "Visible description.",
+        execute: async () => "ok",
+        ...extra,
+      });
+      assert.equal(result.ok, false, JSON.stringify(extra));
+      assert.match(result.error, /invisible or control/i);
+    }
+    assert.equal(ctx.registerCalls.length, 0);
+
+    const accented = await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "probe",
+      name: "Probe",
+      description: "Liste des cafés.",
+      execute: async () => "ok",
+    });
+    assert.equal(accented.ok, true);
+  });
+
   it("rejects empty description", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
