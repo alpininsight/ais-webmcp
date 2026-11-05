@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -58,6 +59,26 @@ def run(*args, cwd=None, env=None):
     result = subprocess.run(args, cwd=cwd, env=env, check=False, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     return result
+
+
+def test_pypi_metadata_urls_and_apache_license():
+    """PyPI project URLs point at this public repository. License stays Apache-2.0."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["license"] == "Apache-2.0"
+    assert project["license-files"] == ["LICENSE", "NOTICE"]
+    assert "License :: OSI Approved :: Apache Software License" in project["classifiers"]
+    # The library is not fully typed (several public helpers are unannotated),
+    # so it must not claim Typing :: Typed.
+    assert "Typing :: Typed" not in project["classifiers"]
+    assert not (ROOT / "src" / "ais_webmcp" / "py.typed").is_file()
+    urls = project["urls"]
+    assert urls["Homepage"] == "https://insight-ui-webmcp.alpininsight.ai/"
+    assert urls["Documentation"] == "https://insight-ui-webmcp.alpininsight.ai/"
+    assert urls["Repository"] == "https://github.com/alpininsight/ais-webmcp"
+    assert urls["Issues"] == "https://github.com/alpininsight/ais-webmcp/issues"
+    assert (
+        urls["Changelog"] == "https://github.com/alpininsight/ais-webmcp/blob/develop/CHANGELOG.md"
+    )
 
 
 @pytest.mark.integration
