@@ -54,6 +54,35 @@ _DEFAULT_IGNORABLE_EXTRA = (
 )
 
 SCHEMA_KEYS = ("inputSchema", "parameters", "input_schema")
+# Subschema keywords only. const, default, enum, and examples are instance
+# data: a description or properties member there is not a schema field.
+_SCHEMA_KEYWORDS = frozenset(
+    {
+        "additionalProperties",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "contains",
+        "propertyNames",
+        "not",
+        "if",
+        "then",
+        "else",
+        "contentSchema",
+    }
+)
+_SCHEMA_ARRAY_KEYWORDS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
+_SCHEMA_MAP_KEYWORDS = frozenset(
+    {
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+        "dependencies",
+    }
+)
+# Draft 04/07: items and additionalItems are a schema or an array of schemas.
+_SCHEMA_OR_ARRAY_KEYWORDS = frozenset({"items", "additionalItems"})
 OUTPUT_SCHEMA_KEYS = ("outputSchema", "output_schema")
 # Stable signal for check engines. Missing output schemas stay valid.
 MISSING_OUTPUT_SCHEMA_CODE = "missing_output_schema"
@@ -243,50 +272,87 @@ def _oversized(path: str, label: str, length: int, limit: int) -> ValidationFind
 
 
 def _schema_field_findings(schema: Any, prefix: str, seen: set[int]) -> list[ValidationFinding]:
-    """Flag soft maxima inside an input or output schema. Does not fail the tool."""
-    if isinstance(schema, dict):
-        marker = id(schema)
-        if marker in seen:
-            return []
-        seen.add(marker)
-        found: list[ValidationFinding] = []
-        description = schema.get("description")
-        if isinstance(description, str) and len(description) > SCHEMA_DESCRIPTION_SOFT_MAX:
-            found.append(
-                _oversized(
-                    f"{prefix}.description",
-                    "schema description",
-                    len(description),
-                    SCHEMA_DESCRIPTION_SOFT_MAX,
-                )
+    """Flag soft maxima inside an input or output schema. Does not fail the tool.
+
+    Only schema-bearing keywords are walked. Instance values under ``const``,
+    ``default``, ``enum``, and ``examples`` are not nested schemas.
+    """
+    if not isinstance(schema, dict):
+        return []
+    marker = id(schema)
+    if marker in seen:
+        return []
+    seen.add(marker)
+    found: list[ValidationFinding] = []
+    description = schema.get("description")
+    if isinstance(description, str) and len(description) > SCHEMA_DESCRIPTION_SOFT_MAX:
+        found.append(
+            _oversized(
+                f"{prefix}.description",
+                "schema description",
+                len(description),
+                SCHEMA_DESCRIPTION_SOFT_MAX,
             )
-        properties = schema.get("properties")
-        if isinstance(properties, dict):
-            for key in properties:
-                if isinstance(key, str) and len(key) > SCHEMA_PROPERTY_NAME_MAX:
-                    found.append(
-                        _oversized(
-                            f"{prefix}.properties.{key}",
-                            "parameter name",
-                            len(key),
-                            SCHEMA_PROPERTY_NAME_MAX,
-                        )
+        )
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for key in properties:
+            if isinstance(key, str) and len(key) > SCHEMA_PROPERTY_NAME_MAX:
+                found.append(
+                    _oversized(
+                        f"{prefix}.properties.{key}",
+                        "parameter name",
+                        len(key),
+                        SCHEMA_PROPERTY_NAME_MAX,
                     )
-        for key, value in schema.items():
-            if isinstance(value, dict | list):
-                child = f"{prefix}.{key}" if isinstance(key, str) else prefix
-                found.extend(_schema_field_findings(value, child, seen))
-        return found
-    if isinstance(schema, list):
-        marker = id(schema)
-        if marker in seen:
-            return []
-        seen.add(marker)
-        found = []
-        for index, item in enumerate(schema):
-            found.extend(_schema_field_findings(item, f"{prefix}[{index}]", seen))
-        return found
+                )
+    for key in _SCHEMA_KEYWORDS:
+        found.extend(_nested_schema_findings(schema.get(key), f"{prefix}.{key}", seen))
+    for key in _SCHEMA_ARRAY_KEYWORDS:
+        found.extend(_schema_array_findings(schema.get(key), f"{prefix}.{key}", seen))
+    for key in _SCHEMA_MAP_KEYWORDS:
+        found.extend(_schema_map_findings(schema.get(key), f"{prefix}.{key}", seen))
+    for key in _SCHEMA_OR_ARRAY_KEYWORDS:
+        value = schema.get(key)
+        child = f"{prefix}.{key}"
+        if isinstance(value, list):
+            found.extend(_schema_array_findings(value, child, seen))
+        else:
+            found.extend(_nested_schema_findings(value, child, seen))
+    return found
+
+
+def _nested_schema_findings(value: Any, prefix: str, seen: set[int]) -> list[ValidationFinding]:
+    if isinstance(value, dict):
+        return _schema_field_findings(value, prefix, seen)
     return []
+
+
+def _schema_array_findings(value: Any, prefix: str, seen: set[int]) -> list[ValidationFinding]:
+    if not isinstance(value, list):
+        return []
+    marker = id(value)
+    if marker in seen:
+        return []
+    seen.add(marker)
+    found: list[ValidationFinding] = []
+    for index, item in enumerate(value):
+        found.extend(_nested_schema_findings(item, f"{prefix}[{index}]", seen))
+    return found
+
+
+def _schema_map_findings(value: Any, prefix: str, seen: set[int]) -> list[ValidationFinding]:
+    if not isinstance(value, dict):
+        return []
+    marker = id(value)
+    if marker in seen:
+        return []
+    seen.add(marker)
+    found: list[ValidationFinding] = []
+    for key, child in value.items():
+        if isinstance(key, str):
+            found.extend(_nested_schema_findings(child, f"{prefix}.{key}", seen))
+    return found
 
 
 def _output_schema_checks(

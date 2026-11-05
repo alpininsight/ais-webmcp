@@ -496,6 +496,8 @@ def test_invisible_or_control_characters_fail_names_and_descriptions() -> None:
         "description tag": {"description": "Hello\U000e0001world"},
         "description missed ignorable": {"description": "Hello\u2065world"},
         "description unassigned format": {"description": "Hello\ufff0world"},
+        "description arabic number sign": {"description": "Hello\u0600world"},
+        "description end of ayah": {"description": "Hello\u06ddworld"},
         "name zero-width": {"name": "Probe\u200b"},
         "id control": {"id": "pro\u0007be"},
         "title bidi": {"title": "Probe\u202e"},
@@ -510,6 +512,65 @@ def test_invisible_or_control_characters_fail_names_and_descriptions() -> None:
     assert plain.ok, plain.issues
     combining = validate_data(_probe(description="cafe\u0301"))
     assert combining.ok, combining.issues
+
+
+@pytest.mark.unit
+def test_edge_only_controls_fail_raw_descriptions() -> None:
+    """A control or format character only at an edge is an error, not trimmed off."""
+    for description in ("hello\n", "\thello", "hello\ufeff", "\ufeffhello"):
+        result = validate_data(_probe(description=description))
+        assert result.ok is False, repr(description)
+        assert any(
+            issue.path == "tools[0].description"
+            and issue.message == f"description {INVISIBLE_OR_CONTROL_MESSAGE}"
+            for issue in result.issues
+        ), description
+
+
+@pytest.mark.unit
+def test_instance_valued_schema_keywords_are_not_schema_fields() -> None:
+    """const, default, enum, and examples are instance data, not nested schemas."""
+    long_desc = "d" * (SCHEMA_DESCRIPTION_SOFT_MAX + 1)
+    long_key = "k" * (SCHEMA_PROPERTY_NAME_MAX + 1)
+
+    def instance() -> dict[str, object]:
+        return {
+            "description": long_desc,
+            "properties": {long_key: {"type": "string", "description": long_desc}},
+        }
+
+    data = _probe(
+        inputSchema={
+            "type": "object",
+            "const": instance(),
+            "default": instance(),
+            "enum": [instance()],
+            "examples": [instance()],
+            "contains": {"description": long_desc},
+            "allOf": [{"description": long_desc}],
+            "properties": {
+                "real": {
+                    "type": "string",
+                    "examples": [instance()],
+                    "default": instance(),
+                }
+            },
+        }
+    )
+    result = validate_data(data)
+    assert result.ok, result.issues
+    oversized = [
+        finding.path for finding in result.findings if finding.code == OVERSIZED_SCHEMA_FIELD_CODE
+    ]
+    assert set(oversized) == {
+        "tools[0].inputSchema.contains.description",
+        "tools[0].inputSchema.allOf[0].description",
+    }
+    assert all(
+        finding.severity == OVERSIZED_SCHEMA_FIELD_SEVERITY
+        for finding in result.findings
+        if finding.code == OVERSIZED_SCHEMA_FIELD_CODE
+    )
 
 
 @pytest.mark.unit

@@ -36,10 +36,11 @@
 
   // Tool names: 1..128 chars of [A-Za-z0-9_.-] (WebMCP draft).
   var TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
-  // Controls (Cc), format characters, and Default_Ignorable code points a
-  // UTF-16 range check misses (U+2065, U+FFF0–U+FFF8, tag characters).
+  // Cc, Cf, and Cs, plus Default_Ignorable code points whose category is
+  // none of those. Property escapes cover the whole Cf set (U+0600, U+06DD,
+  // and the rest an explicit BMP list missed).
   var INVISIBLE_OR_CONTROL_RE =
-    /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF0-\uFFF8\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}]/u;
+    /[\p{Cc}\p{Cf}\p{Cs}\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180D\u2065\u3164\uFE00-\uFE0F\uFFA0\uFFF0-\uFFF8\u{E0100}-\u{E01EF}]/u;
 
   function hasInvisibleOrControl(value) {
     return typeof value === "string" && INVISIBLE_OR_CONTROL_RE.test(value);
@@ -512,19 +513,27 @@
       };
     }
 
-    var description =
-      typeof spec.description === "string" ? spec.description.trim() : "";
-    if (!description) {
+    if (typeof spec.description !== "string") {
       return {
         ok: false,
         error: "non-empty description is required",
         name: name,
       };
     }
-    if (hasInvisibleOrControl(description)) {
+    // Inspect the raw description. trim() would drop a control or U+FEFF
+    // that sits only at an edge and then accept the sanitized text.
+    if (hasInvisibleOrControl(spec.description)) {
       return {
         ok: false,
         error: "description contains an invisible or control character",
+        name: name,
+      };
+    }
+    var description = spec.description.trim();
+    if (!description) {
+      return {
+        ok: false,
+        error: "non-empty description is required",
         name: name,
       };
     }
