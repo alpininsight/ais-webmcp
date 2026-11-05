@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 publication_spec = importlib.util.spec_from_file_location(
@@ -101,6 +100,8 @@ def test_failed_readback_with_successful_upload_can_be_audited(producer):
         ("run_attempt", 2),
         ("event", "pull_request"),
         ("path", ".github/workflows/cdn-develop.yml"),
+        ("path", ".github/workflows/ci.yml"),
+        ("path", ".github/workflows/ais-webmcp-release-assets.yml"),
         ("head_branch", "develop"),
         ("head_sha", "not-a-sha"),
         ("repository", {"full_name": "other/repository"}),
@@ -212,28 +213,6 @@ def test_audit_pipeline_checks_provenance_and_pypi_before_public_cdn(
     result = audit.audit(10, 1, 20, "0.1.1", tmp_path / "bundle")
     assert calls == ["download_delivery", "verify_bundle", "verify_index", "verify_cdn"]
     assert result["audit_kind"] == "read-only-existing-delivery"
-
-
-def test_audit_mode_cannot_reach_preview_publisher_or_write_credentials():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/cdn-develop.yml").read_text())
-    trigger = workflow.get("on", workflow.get(True))["workflow_dispatch"]
-    assert trigger["inputs"]["mode"]["default"] == "preview"
-    assert trigger["inputs"]["mode"]["options"] == ["preview", "release-audit"]
-    for name in ("quality", "version", "cdn"):
-        assert "inputs.mode == 'preview'" in workflow["jobs"][name]["if"]
-    assert "vars.WEBMCP_CDN_PUBLISH_ENABLED == 'true'" in workflow["jobs"]["quality"]["if"]
-    job = workflow["jobs"]["release-audit"]
-    assert job["if"] == "inputs.mode == 'release-audit' && github.ref == 'refs/heads/develop'"
-    assert job["permissions"] == {
-        "contents": "read",
-        "actions": "read",
-        "pull-requests": "read",
-    }
-    assert "needs" not in job and "uses" not in job and "secrets" not in job
-    text = str(job)
-    assert "R2_" not in text and "secrets." not in text
-    assert "build_delivery.py" not in text and "uv sync" not in text
-    assert "static-assets-reusable" not in text and "publish=true" not in text
 
 
 def test_failed_pypi_readback_cannot_reach_cdn(producer, monkeypatch, tmp_path):
@@ -387,3 +366,8 @@ def test_cli_writes_the_read_only_audit_report(producer, monkeypatch, tmp_path):
     assert result["source_sha"] == SHA
     assert result["objects"] == ["register.js"]
     assert result["audit_kind"] == "read-only-existing-delivery"
+
+
+def test_only_the_removed_release_workflow_is_a_legacy_producer():
+    assert audit.LEGACY_PRODUCER_WORKFLOW == ".github/workflows/release.yml"
+    assert not (ROOT / audit.LEGACY_PRODUCER_WORKFLOW).exists()

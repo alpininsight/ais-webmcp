@@ -48,7 +48,7 @@ def test_ci_uses_central_repository_policy():
         for name, body in callers.items()
         if any("runs-on" in job for job in body["jobs"].values())
     ]
-    assert set(local_runs) <= {"ci.yml", "release.yml", "npm-publish.yml", "cdn-develop.yml"}
+    assert set(local_runs) <= {"ci.yml", "npm-publish.yml"}
 
 
 def test_npm_publish_runs_in_this_repository():
@@ -174,81 +174,17 @@ def test_npm_publish_runs_in_this_repository():
     assert "npm-pack" in ci["jobs"]["gate"]["needs"]
 
 
-def test_cdn_workflow_cannot_promote_preview_to_latest():
-    preview = yaml.safe_load((ROOT / ".github/workflows/cdn-develop.yml").read_text())
-    config = preview["jobs"]["cdn"]["with"]
-    assert config["update_latest"] is False
-    assert config["cdn_upload_immutable"] is False
-    assert config["cdn_aliases"] == "develop"
-    assert config["cdn_mutable_cache_max_age"] == "300"
-    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    assert release["jobs"]["cdn"]["needs"] == ["pypi-verified", "version"]
-    assert release["jobs"]["cdn"]["with"]["cdn_asset_globs"] == "*.js,*.json"
-
-
-def test_release_has_no_pypi_upload_and_hands_off_per_package():
-    """PyPI Trusted Publishing lives in .github-private, one entry point per project."""
-    text = (ROOT / ".github/workflows/release.yml").read_text()
-    release = yaml.safe_load(text)
-    assert "pypa/gh-action-pypi-publish" not in text
-    assert all("environment" not in job for job in release["jobs"].values())
-    assert all("id-token" not in (job.get("permissions") or {}) for job in release["jobs"].values())
-    triggers = release.get("on", release.get(True))
-    assert set(triggers["workflow_dispatch"]["inputs"]) == {"release", "cdn"}
-    assert release["jobs"]["release"]["if"] == "inputs.release"
-    handoff = str(release["jobs"]["handoff"])
-    for workflow in ("ais-webmcp-publish-python.yml",):
-        assert workflow in handoff
-    assert "insight-ui-webmcp-publish-python.yml" not in handoff
-    assert "publish=false" in handoff
-    assert "publish=true" in handoff
-    for field in ("producer_run_id", "producer_attempt", "artifact_id"):
-        assert field in handoff
-
-
-def test_cdn_requires_own_pypi_project_first():
-    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    gate = release["jobs"]["pypi-verified"]
-    assert gate["if"] == "inputs.cdn"
-    assert "build" in gate["needs"]
-    run = gate["steps"][-1]["run"]
-    assert "check_publication.py bundle" in run
-    assert "check_publication.py index --version" in run
-    assert "--project" not in run
-    source = str(release["jobs"]["source"])
-    assert "WEBMCP_PYPI_PUBLISH_ENABLED" in source
-    assert "refs/heads/main" in source
-    assert "CDN_REQUESTED" in source and "CDN_ENABLED" in source
-    assert "WEBMCP_CDN_PUBLISH_ENABLED" in source
-    evidence = release["jobs"]["cdn-verified"]
-    assert set(evidence["needs"]) == {"cdn", "build", "version"}
-    assert "check_publication.py cdn" in str(evidence)
-
-
-def _nested_permissions(workflow):
-    requested = {}
-    for job in workflow["jobs"].values():
-        for scope, level in (job.get("permissions") or workflow.get("permissions") or {}).items():
-            if level != "none":
-                requested[scope] = "write" if "write" in {level, requested.get(scope)} else level
-    return requested
-
-
-def test_ci_callers_grant_nested_permissions():
-    """A reusable caller granting less than ci.yml's jobs request fails at startup."""
-    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
-    requested = _nested_permissions(ci)
-    assert requested.get("pull-requests") == "read"
-    for name in ("cdn-develop.yml",):
-        workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
-        caller = workflow["jobs"]["quality"]
-        assert caller["uses"] == "./.github/workflows/ci.yml"
-        granted = caller.get("permissions") or workflow.get("permissions") or {}
-        for scope, level in requested.items():
-            assert granted.get(scope) in ({"write"} if level == "write" else {"read", "write"}), (
-                name,
-                scope,
-            )
+def test_release_and_cdn_run_in_the_central_executor():
+    """Public repositories cannot call private reusables; release/CDN moved out."""
+    workflows = ROOT / ".github/workflows"
+    for name in ("release.yml", "cdn-develop.yml"):
+        assert not (workflows / name).exists(), name
+    runbook = (ROOT / "docs/ci-and-release.md").read_text()
+    assert "ais-webmcp-release-assets.yml" in runbook
+    assert "npm-publish.yml" in runbook
+    ci = yaml.safe_load((workflows / "ci.yml").read_text())
+    push = ci.get("on", ci.get(True))["push"]["branches"]
+    assert set(push) == {"develop", "main"}
 
 
 @pytest.mark.parametrize(
@@ -281,7 +217,7 @@ def test_registry_readback_is_exact(monkeypatch, tmp_path, remote):
         return io.BytesIO(json.dumps(payload).encode())
 
     monkeypatch.setattr(publication.urllib.request, "urlopen", urlopen)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="registry checksum mismatch"):
         publication.verify_index(tmp_path, "1.2.3")
 
 

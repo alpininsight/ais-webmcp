@@ -207,3 +207,5 @@ core's history and existing host pins are preserved.
 
 The repository documents code versus metadata checks, Main CI reuse and the
 central build-once Python publication handoff for maintainers.
+GitHub releases and asset delivery run outside this public repository; see
+[docs/ci-and-release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/ci-and-release.md).
