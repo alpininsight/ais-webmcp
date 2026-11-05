@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Publish PyPI project URLs for this repository, its issue tracker, and
+  `CHANGELOG.md` on the `develop` branch. The Apache-2.0 license stays a
+  PEP 639 `License-Expression`, and the OSI Apache license classifier is set.
+  The package is not marked `Typing :: Typed`.
+- `ais-webmcp validate` rejects invisible or control characters in tool
+  names, ids, titles, and descriptions, and rejects empty or whitespace-only
+  descriptions. Tool descriptions over 750 code points, schema descriptions
+  over 500, and parameter names over 128 are a low finding
+  `oversized_schema_field` and do not fail the manifest.
+- A missing `outputSchema` stays a low `missing_output_schema` finding.
+  A tool that omits `readOnlyHint` adds a low `hints_not_safety_assurances`
+  finding: missing `readOnlyHint`, `destructiveHint`, and `openWorldHint`
+  must not be treated as safe. Side effects stay on `consequentialHint`.
+  `registerTool`, `getTools`, and `executeTool` are unchanged.
+
 ## 0.1.2 (2026-11-02)
 
 - First release of the browser runtime on npm as
