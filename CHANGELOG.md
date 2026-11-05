@@ -19,10 +19,9 @@
 
 ## 0.1.2 (2026-11-02)
 
-- First release of the browser runtime on npm as
-  `@alpininsightsolutions/webmcp` 0.1.2, published from this repository with
-  Trusted Publishing and provenance. The README describes the published npm
-  package and no longer names internal repositories, hosts, environments or
+- Prepare the browser runtime for npm as `@alpininsightsolutions/webmcp`
+  (Trusted Publishing and provenance); the first npm release is pending. The
+  README describes the npm package and no longer names internal repositories, hosts, environments or
   people; the maintainer process lives in `docs/release.md`.
 - Point the npm `homepage` at https://insight-ui-webmcp.alpininsight.ai/.
   The `bugs` URL stays explicit (the GitHub issue tracker) so npm does not
