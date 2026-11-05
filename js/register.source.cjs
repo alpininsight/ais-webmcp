@@ -15,6 +15,11 @@
  * - `outputSchema` (alias `output_schema`) is optional. When set it must be
  *   one JSON Schema object and is copied onto the registered tool. Omission
  *   still registers; manifest validation reports that as a low finding.
+ * - Tool names, titles, and descriptions reject invisible or control
+ *   characters. A whitespace-only description is rejected.
+ * - Missing readOnlyHint is stored as false only when the tool is not
+ *   consequential. That default is not a safety assurance, and missing
+ *   destructiveHint or openWorldHint must not be treated as safe.
  * - Tool lifecycle events `toolactivated` / `toolcancel` (handler properties
  *   `ontoolactivated` / `ontoolcancel`) fire on `document.modelContext`
  *   (Chrome 156+ / WebMCP PR #245). Helpers `onToolActivated` / `onToolCancel`
@@ -31,6 +36,15 @@
 
   // Tool names: 1..128 chars of [A-Za-z0-9_.-] (WebMCP draft).
   var TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
+  // Cc, Cf, and Cs, plus Default_Ignorable code points whose category is
+  // none of those. Property escapes cover the whole Cf set (U+0600, U+06DD,
+  // and the rest an explicit BMP list missed).
+  var INVISIBLE_OR_CONTROL_RE =
+    /[\p{Cc}\p{Cf}\p{Cs}\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180D\u2065\u3164\uFE00-\uFE0F\uFFA0\uFFF0-\uFFF8\u{E0100}-\u{E01EF}]/u;
+
+  function hasInvisibleOrControl(value) {
+    return typeof value === "string" && INVISIBLE_OR_CONTROL_RE.test(value);
+  }
 
   function getModelContext() {
     try {
@@ -341,6 +355,9 @@
     }
 
     // Absence of a consequential hint does not establish read-only behavior.
+    // readOnlyHint false here is the cautious default, not an assurance.
+    // Missing readOnlyHint, destructiveHint, and openWorldHint must not be
+    // treated as safe. This runtime stores side effects as consequentialHint.
     if (
       typeof annotations.readOnlyHint !== "boolean" &&
       annotations.consequentialHint !== true
@@ -480,6 +497,13 @@
     if (!name || typeof name !== "string") {
       return { ok: false, error: "tool name/id is required", name: name };
     }
+    if (hasInvisibleOrControl(name)) {
+      return {
+        ok: false,
+        error: "tool name contains an invisible or control character",
+        name: name,
+      };
+    }
     if (!TOOL_NAME_RE.test(name)) {
       return {
         ok: false,
@@ -489,12 +513,34 @@
       };
     }
 
-    var description =
-      typeof spec.description === "string" ? spec.description.trim() : "";
+    if (typeof spec.description !== "string") {
+      return {
+        ok: false,
+        error: "non-empty description is required",
+        name: name,
+      };
+    }
+    // Inspect the raw description. trim() would drop a control or U+FEFF
+    // that sits only at an edge and then accept the sanitized text.
+    if (hasInvisibleOrControl(spec.description)) {
+      return {
+        ok: false,
+        error: "description contains an invisible or control character",
+        name: name,
+      };
+    }
+    var description = spec.description.trim();
     if (!description) {
       return {
         ok: false,
         error: "non-empty description is required",
+        name: name,
+      };
+    }
+    if (hasInvisibleOrControl(title)) {
+      return {
+        ok: false,
+        error: "title contains an invisible or control character",
         name: name,
       };
     }

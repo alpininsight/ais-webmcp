@@ -15,10 +15,20 @@ from jsonschema import Draft202012Validator
 from webmcp_manifest.profiles import list_profiles
 from webmcp_manifest.profiles.webpage import WebpageProfile
 from webmcp_manifest.validate import (
+    HINTS_NOT_SAFE_CODE,
+    HINTS_NOT_SAFE_MESSAGE,
+    HINTS_NOT_SAFE_SEVERITY,
+    HINTS_NOTE,
+    INVISIBLE_OR_CONTROL_MESSAGE,
     LIFECYCLE_NOTE,
     MISSING_OUTPUT_SCHEMA_CODE,
     MISSING_OUTPUT_SCHEMA_MESSAGE,
     MISSING_OUTPUT_SCHEMA_SEVERITY,
+    OVERSIZED_SCHEMA_FIELD_CODE,
+    OVERSIZED_SCHEMA_FIELD_SEVERITY,
+    SCHEMA_DESCRIPTION_SOFT_MAX,
+    SCHEMA_PROPERTY_NAME_MAX,
+    TOOL_DESCRIPTION_SOFT_MAX,
     ValidationResult,
     builtin_profiles,
     exit_code,
@@ -116,7 +126,7 @@ def test_validate_accepts_json_and_yaml_fixtures() -> None:
         result = validate_path(path)
         assert result.ok, result.issues
         assert result.fatal is False
-        assert result.notes == (LIFECYCLE_NOTE,)
+        assert result.notes == (LIFECYCLE_NOTE, HINTS_NOTE)
 
 
 @pytest.mark.unit
@@ -205,6 +215,7 @@ def test_cli_exits_match_fixtures() -> None:
     assert ok.returncode == 0, ok.stderr + ok.stdout
     assert "ok:" in ok.stdout
     assert LIFECYCLE_NOTE in ok.stdout
+    assert "must not be treated as safe" in ok.stdout
 
     bad = _run_module("validate", str(INVALID / "duplicate-id.json"))
     assert bad.returncode == 1
@@ -218,6 +229,7 @@ def test_cli_exits_match_fixtures() -> None:
     payload = json.loads(as_json.stdout)
     assert payload["ok"] is True
     assert LIFECYCLE_NOTE in payload["notes"]
+    assert HINTS_NOTE in payload["notes"]
 
 
 @pytest.mark.unit
@@ -460,3 +472,221 @@ def test_canonical_manifest_renames_output_schema_alias(tmp_path: Path) -> None:
     assert result.findings == ()
     assert "output_schema" not in canonical["tools"][0]
     assert canonical["tools"][0]["outputSchema"] == {"type": "object", "properties": {}}
+
+
+def _probe(**overrides: object) -> dict:
+    tool: dict = {
+        "id": "probe",
+        "name": "Probe",
+        "description": "Contract probe",
+        "inputSchema": {"type": "object", "properties": {}},
+        "outputSchema": {"type": "object"},
+        "annotations": {"readOnlyHint": True},
+    }
+    tool.update(overrides)
+    return {"profile": "webpage", "version": "1", "tools": [tool]}
+
+
+@pytest.mark.unit
+def test_invisible_or_control_characters_fail_names_and_descriptions() -> None:
+    """Hidden characters are errors. Ordinary text, including accents, stays valid."""
+    hidden = {
+        "description zero-width": {"description": "Hello\u200bworld"},
+        "description bidi": {"description": "Hello\u202eworld"},
+        "description tag": {"description": "Hello\U000e0001world"},
+        "description missed ignorable": {"description": "Hello\u2065world"},
+        "description unassigned format": {"description": "Hello\ufff0world"},
+        "description arabic number sign": {"description": "Hello\u0600world"},
+        "description end of ayah": {"description": "Hello\u06ddworld"},
+        "name zero-width": {"name": "Probe\u200b"},
+        "id control": {"id": "pro\u0007be"},
+        "title bidi": {"title": "Probe\u202e"},
+    }
+    for label, overrides in hidden.items():
+        result = validate_data(_probe(**overrides))
+        assert result.ok is False, label
+        assert any(INVISIBLE_OR_CONTROL_MESSAGE in issue.message for issue in result.issues), label
+        assert exit_code([result]) == 1
+
+    plain = validate_data(_probe(description="Liste des cafés et des 工具."))
+    assert plain.ok, plain.issues
+    combining = validate_data(_probe(description="cafe\u0301"))
+    assert combining.ok, combining.issues
+
+
+@pytest.mark.unit
+def test_edge_only_controls_fail_raw_descriptions() -> None:
+    """A control or format character only at an edge is an error, not trimmed off."""
+    for description in ("hello\n", "\thello", "hello\ufeff", "\ufeffhello"):
+        result = validate_data(_probe(description=description))
+        assert result.ok is False, repr(description)
+        assert any(
+            issue.path == "tools[0].description"
+            and issue.message == f"description {INVISIBLE_OR_CONTROL_MESSAGE}"
+            for issue in result.issues
+        ), description
+
+
+@pytest.mark.unit
+def test_instance_valued_schema_keywords_are_not_schema_fields() -> None:
+    """const, default, enum, and examples are instance data, not nested schemas."""
+    long_desc = "d" * (SCHEMA_DESCRIPTION_SOFT_MAX + 1)
+    long_key = "k" * (SCHEMA_PROPERTY_NAME_MAX + 1)
+
+    def instance() -> dict[str, object]:
+        return {
+            "description": long_desc,
+            "properties": {long_key: {"type": "string", "description": long_desc}},
+        }
+
+    data = _probe(
+        inputSchema={
+            "type": "object",
+            "const": instance(),
+            "default": instance(),
+            "enum": [instance()],
+            "examples": [instance()],
+            "contains": {"description": long_desc},
+            "allOf": [{"description": long_desc}],
+            "properties": {
+                "real": {
+                    "type": "string",
+                    "examples": [instance()],
+                    "default": instance(),
+                }
+            },
+        }
+    )
+    result = validate_data(data)
+    assert result.ok, result.issues
+    oversized = [
+        finding.path for finding in result.findings if finding.code == OVERSIZED_SCHEMA_FIELD_CODE
+    ]
+    assert set(oversized) == {
+        "tools[0].inputSchema.contains.description",
+        "tools[0].inputSchema.allOf[0].description",
+    }
+    assert all(
+        finding.severity == OVERSIZED_SCHEMA_FIELD_SEVERITY
+        for finding in result.findings
+        if finding.code == OVERSIZED_SCHEMA_FIELD_CODE
+    )
+
+
+@pytest.mark.unit
+def test_whitespace_only_description_is_rejected() -> None:
+    for description in ("", "   ", "\n\t", "\u00a0"):
+        result = validate_data(_probe(description=description))
+        assert result.ok is False
+        assert any(
+            "missing description (empty or whitespace-only)" in issue.message
+            for issue in result.issues
+        )
+        assert exit_code([result]) == 1
+
+
+@pytest.mark.unit
+def test_oversized_schema_fields_are_low_findings() -> None:
+    """Soft maxima flag the field and leave the manifest valid."""
+    at_limit = _probe(
+        description="d" * TOOL_DESCRIPTION_SOFT_MAX,
+        inputSchema={
+            "type": "object",
+            "description": "s" * SCHEMA_DESCRIPTION_SOFT_MAX,
+            "properties": {
+                "p" * SCHEMA_PROPERTY_NAME_MAX: {
+                    "type": "string",
+                    "description": "n" * SCHEMA_DESCRIPTION_SOFT_MAX,
+                }
+            },
+        },
+    )
+    limited = validate_data(at_limit)
+    assert limited.ok, limited.issues
+    assert limited.findings == ()
+
+    oversized = _probe(
+        description="d" * (TOOL_DESCRIPTION_SOFT_MAX + 1),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "outer": {
+                    "type": "object",
+                    "properties": {
+                        "q" * (SCHEMA_PROPERTY_NAME_MAX + 1): {
+                            "type": "string",
+                            "description": "n" * (SCHEMA_DESCRIPTION_SOFT_MAX + 1),
+                        }
+                    },
+                }
+            },
+        },
+        outputSchema={
+            "type": "object",
+            "description": "o" * (SCHEMA_DESCRIPTION_SOFT_MAX + 1),
+        },
+    )
+    result = validate_data(oversized)
+    assert result.ok, result.issues
+    assert exit_code([result]) == 0
+    by_path = {finding.path: finding for finding in result.findings}
+    assert set(by_path) == {
+        "tools[0].description",
+        "tools[0].inputSchema.properties.outer.properties."
+        + ("q" * (SCHEMA_PROPERTY_NAME_MAX + 1)),
+        "tools[0].inputSchema.properties.outer.properties."
+        + ("q" * (SCHEMA_PROPERTY_NAME_MAX + 1))
+        + ".description",
+        "tools[0].outputSchema.description",
+    }
+    assert {finding.code for finding in result.findings} == {OVERSIZED_SCHEMA_FIELD_CODE}
+    assert {finding.severity for finding in result.findings} == {OVERSIZED_SCHEMA_FIELD_SEVERITY}
+    assert "750" in by_path["tools[0].description"].message
+    assert "500" in by_path["tools[0].outputSchema.description"].message
+    text = render_text([result])
+    assert text.startswith("ok:")
+    assert f"[low] {OVERSIZED_SCHEMA_FIELD_CODE}:" in text
+
+
+@pytest.mark.unit
+def test_missing_output_schema_stays_a_low_finding() -> None:
+    data = _probe()
+    data["tools"][0].pop("outputSchema")
+    result = validate_data(data)
+    assert result.ok, result.issues
+    assert exit_code([result]) == 0
+    assert len(result.findings) == 1
+    finding = result.findings[0]
+    assert finding.code == MISSING_OUTPUT_SCHEMA_CODE
+    assert finding.severity == MISSING_OUTPUT_SCHEMA_SEVERITY
+    assert finding.message == MISSING_OUTPUT_SCHEMA_MESSAGE
+
+
+@pytest.mark.unit
+def test_missing_hints_are_not_treated_as_safe() -> None:
+    """A missing readOnlyHint is a low finding. Setting it does not invent the others."""
+    omitted = _probe()
+    del omitted["tools"][0]["annotations"]
+    result = validate_data(omitted)
+    assert result.ok, result.issues
+    assert exit_code([result]) == 0
+    assert len(result.findings) == 1
+    finding = result.findings[0]
+    assert finding.path == "tools[0]"
+    assert finding.code == HINTS_NOT_SAFE_CODE
+    assert finding.severity == HINTS_NOT_SAFE_SEVERITY
+    assert finding.message == HINTS_NOT_SAFE_MESSAGE
+    for hint in ("readOnlyHint", "destructiveHint", "openWorldHint"):
+        assert hint in finding.message
+    assert "must not be treated as safe" in finding.message
+    assert HINTS_NOTE in result.notes
+    text = render_text([result])
+    assert text.startswith("ok:")
+    assert f"[low] {HINTS_NOT_SAFE_CODE}:" in text
+    assert "must not be treated as safe" in text
+
+    explicit = validate_data(_probe())
+    assert explicit.ok, explicit.issues
+    assert explicit.findings == ()
+    assert HINTS_NOTE in explicit.notes
+    assert "consequentialHint" in HINTS_NOTE

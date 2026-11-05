@@ -233,6 +233,107 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(ctx.registerCalls.length, 0);
   });
 
+  it("rejects invisible or control characters in names and descriptions", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const cases = [
+      { description: "Hello\u200bworld" },
+      { description: "Hello\u202eworld" },
+      { description: "Hello\u2065world" },
+      { description: "Hello\u{E0001}world" },
+      { title: "Probe\u200b" },
+      { id: "pro\u0007be", name: "Probe" },
+    ];
+    for (const extra of cases) {
+      const result = await api.registerTool({
+        inputSchema: { type: "object" },
+        id: "probe",
+        name: "Probe",
+        description: "Visible description.",
+        execute: async () => "ok",
+        ...extra,
+      });
+      assert.equal(result.ok, false, JSON.stringify(extra));
+      assert.match(result.error, /invisible or control/i);
+    }
+    assert.equal(ctx.registerCalls.length, 0);
+
+    const accented = await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "probe",
+      name: "Probe",
+      description: "Liste des cafés.",
+      execute: async () => "ok",
+    });
+    assert.equal(accented.ok, true);
+  });
+
+  it("rejects every Unicode format character in descriptions", async () => {
+    const format = /\p{Cf}/u;
+    const chars = [];
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue;
+      const ch = String.fromCodePoint(cp);
+      if (format.test(ch)) chars.push(ch);
+    }
+    assert.ok(chars.includes("\u0600"));
+    assert.ok(chars.includes("\u06dd"));
+
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    for (const ch of chars) {
+      const description = `Hello${ch}world`;
+      const result = await api.registerTool({
+        inputSchema: { type: "object" },
+        id: "probe",
+        name: "Probe",
+        description,
+        execute: async () => "ok",
+      });
+      const code = ch.codePointAt(0).toString(16).toUpperCase();
+      assert.equal(result.ok, false, `U+${code}`);
+      assert.match(result.error, /invisible or control/i, `U+${code}`);
+    }
+    assert.equal(ctx.registerCalls.length, 0);
+
+    const cubeRoot = await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "probe",
+      name: "Probe",
+      description: "Hello\u0606world",
+      execute: async () => "ok",
+    });
+    assert.equal(cubeRoot.ok, true);
+  });
+
+  it("rejects control and format characters before trimming the description", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const cases = ["hello\n", "\thello", "hello\uFEFF", "\uFEFFhello"];
+    for (const description of cases) {
+      const result = await api.registerTool({
+        inputSchema: { type: "object" },
+        id: "probe",
+        name: "Probe",
+        description,
+        execute: async () => "ok",
+      });
+      assert.equal(result.ok, false, JSON.stringify(description));
+      assert.match(result.error, /invisible or control/i);
+    }
+    assert.equal(ctx.registerCalls.length, 0);
+
+    const padded = await api.registerTool({
+      inputSchema: { type: "object" },
+      id: "probe",
+      name: "Probe",
+      description: "  hello  ",
+      execute: async () => "ok",
+    });
+    assert.equal(padded.ok, true);
+    assert.equal(ctx.tools.get("probe").description, "hello");
+  });
+
   it("rejects empty description", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
