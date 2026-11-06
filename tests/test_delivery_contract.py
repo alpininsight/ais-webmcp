@@ -251,7 +251,12 @@ def test_public_docs_do_not_link_private_repositories():
     """NOTICE and the release runbook stay free of private repository links."""
     notice = (ROOT / "NOTICE").read_text()
     assert "github.com/alpininsight/insight-ui-webmcp" not in notice
-    assert "https://insight-ui-webmcp.alpininsight.ai" in notice
+    # Full-line equality, not a URL substring check. CodeQL
+    # py/incomplete-url-substring-sanitization flags `url in text` even in tests.
+    assert any(
+        line.strip() == "Documentation: https://insight-ui-webmcp.alpininsight.ai"
+        for line in notice.splitlines()
+    ), "expected public documentation line in NOTICE"
     runbook = (ROOT / "docs/ci-and-release.md").read_text()
     assert "alpininsight/.github-private" not in runbook
     assert "ais-webmcp-publish-python.yml" in runbook
