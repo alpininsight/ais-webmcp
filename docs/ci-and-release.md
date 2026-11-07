@@ -3,9 +3,10 @@
 ## Code and metadata checks
 
 `ci.yml` runs the full test matrix for PR opening, new commits, reopening and
-base-branch retargeting (`edited` with `changes.base`). A push to `main` also runs
-full CI. Develop pushes do not launch another matrix; the integration and release
-promotion PRs provide their own tests. Manual CI remains available.
+base-branch retargeting (`edited` with `changes.base`). Pushes to both `develop`
+and `main` also run full CI. The private release/CDN executor requires this
+exact-head push evidence for the selected protected source branch. Manual CI
+remains available.
 
 Title/body edits and `ready_for_review` run read-only Repository Policy and a
 Quality Gate that **revalidates existing full CI evidence**, without rerunning
