@@ -3,9 +3,10 @@
 ## Code and metadata checks
 
 `ci.yml` runs the full test matrix for PR opening, new commits, reopening and
-base-branch retargeting (`edited` with `changes.base`). A push to `main` also runs
-full CI. Develop pushes do not launch another matrix; the integration and release
-promotion PRs provide their own tests. Manual CI remains available.
+base-branch retargeting (`edited` with `changes.base`). Pushes to both `develop`
+and `main` also run full CI. The private release/CDN executor requires this
+exact-head push evidence for the selected protected source branch. Manual CI
+remains available.
 
 Title/body edits and `ready_for_review` run read-only Repository Policy and a
 Quality Gate that **revalidates existing full CI evidence**, without rerunning
@@ -33,23 +34,26 @@ Require **both** `WebMCP Quality Gate` and
 quality are independent: an invalid title can fail Policy while tested code keeps
 its green Quality Gate. Correcting the title then runs only metadata checks.
 
-## Source release and one central package producer
+## Release and CDN run in the central executor
 
-The source `release.yml` accepts only the current protected `main` revision,
-including when `release=false`. It validates the latest exact-SHA **push** run of
-`ci.yml`, its repository, attempt, completed/success result and unique successful
-Quality Gate. A PR/dispatch run or an older green attempt cannot substitute for it.
-Every validator job explicitly provisions Python 3.14 with pinned `setup-uv` and
-runs its standard-library-only validator through `uv run --no-project`. General
-runners need no system `python3`, project dependency sync or nested test matrix.
-The optional CDN readback jobs own the same runtime prerequisite independently.
-GitVersion runs after this validation. Actual release creation additionally needs
-the existing activation flag and an exact merged promotion PR into main.
+This repository is public. GitHub does not let public repositories call private
+reusable workflows, so the former `release.yml` and `cdn-develop.yml` were removed.
+GitHub releases and CDN uploads now run in the organisation's central publishing
+repository (set `PUBLISHER_REPO` to it) through `ais-webmcp-release-assets.yml`.
+That executor checks out this repository at an exact source SHA. It accepts only
+the current protected `develop` or `main` head whose latest exact-SHA **push** run
+of `ci.yml` completed successfully; `ci.yml` therefore runs on pushes to both
+branches. `publish=false` builds only; publication needs the executor's own
+activation flag.
 
-`release=false` performs source/version validation without a nested matrix or
-stable wheel/sdist build. `release=true` creates the matching GitHub tag/release and
-records a handoff; it does not publish to PyPI. The protected central publisher owns
-the stable wheel/sdist build and independent installation tests.
+```bash
+gh workflow run ais-webmcp-release-assets.yml \
+  --repo "${PUBLISHER_REPO:?}" --ref main \
+  -f source_channel=main -f source_sha="$SOURCE_SHA" -f target=release -F publish=true
+```
+
+npm publication stays in this repository (`npm-publish.yml`), because npm
+Trusted Publishing is bound to this repository and workflow file.
 
 After the source release, run the build-only producer workflow in the
 organisation's central publishing repository (set `PUBLISHER_REPO` to it):
@@ -83,7 +87,8 @@ success is not an upload, CDN receipt, consumer deployment or native-browser pro
 
 ## Separate CDN contract
 
-The existing optional `cdn=true` path retains its delivery build, exact PyPI-file
-readback, static-assets publication and independent CDN-byte/header evidence.
-The local source build runs only when CDN is explicitly requested. This change
-neither enables CDN nor changes its flags, aliases or acceptance requirements.
+After PyPI publication, run the executor with `target=cdn` for `main`. It keeps the
+delivery build, exact PyPI-file readback (`check_publication.py bundle/index`),
+static-assets publication and independent CDN-byte/header evidence
+(`check_publication.py cdn`). `source_channel=develop` publishes only the mutable
+`develop` preview alias.

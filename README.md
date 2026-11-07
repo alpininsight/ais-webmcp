@@ -22,8 +22,8 @@ Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
   ([draft specification](https://webmachinelearning.github.io/webmcp/)). It is
   not a W3C Standard and is not on the W3C Standards Track. This package
   targets the `document.modelContext` API only.
-- The browser runtime is also published on npm as
-  `@alpininsightsolutions/webmcp`, starting with version 0.1.2.
+- The browser runtime is prepared as the npm package
+  `@alpininsightsolutions/webmcp`; its first npm release is still pending.
 
 ## Background
 
@@ -82,23 +82,63 @@ explicitly enables and implements them.
 
 ## Output schemas
 
-`outputSchema` is an optional extension by Alpin Insight Solutions, modelled
-on MCP `Tool.outputSchema`. It is not part of the WebMCP specification yet:
-adding it is an open proposal
-([webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9),
-specification PR
-[webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)).
-Browsers currently ignore the field; `ais-webmcp` uses it for validation.
+`outputSchema` is part of the WebMCP draft specification since
+[webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)
+(merged 2026-11-02, closing
+[webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9)),
+modelled on MCP `Tool.outputSchema`. Chrome 159 and later
+(from 159.0.8140.0) accept it on `document.modelContext.registerTool()`.
+`register.js` passes that object through unchanged. If registration fails
+because the browser reports `outputSchema` as an unexpected or unsupported
+member, the helper registers the tool once more without the member so older
+browsers still succeed. A failure that says the schema itself is invalid is
+not retried. WebIDL dictionaries ignore unknown members, which is how current
+older Chrome builds behave.
+
+What the browser should do when a tool result does not match `outputSchema`
+is still open in
+[webmachinelearning/webmcp#92](https://github.com/webmachinelearning/webmcp/issues/92).
+This helper never rejects a result for that reason. For development, pass
+`validateOutput: true` to `registerTool` or `registerFromManifest`. A mismatch
+writes a `console.warn` and the original result is returned. The same mismatch
+for the same tool warns once. The option is off by default, so a production
+registration does not warn and does not block.
+The check is not a full JSON Schema validator and does not add one to the
+page. It covers `type` (including `integer` and a list of types), `required`,
+`properties`, `items`, `enum`, `const`, and `additionalProperties: false`.
+`additionalProperties: false` warns for any own property that is not in
+`properties`, without naming that property. `patternProperties` is not
+evaluated, because a schema regular expression can block the page. When it
+is present, keys outside `properties` are treated as possibly allowed, so
+`additionalProperties: false` is not checked for that object and pattern
+subschemas are not applied. `prefixItems`
+checks tuple positions, and `items` applies only to elements after that
+prefix. Every remaining array element is checked; a warning lists at most
+three paths.
+`const` and `enum` compare nested objects and arrays up to 8 levels. Past
+that the comparison is skipped, so a deep value is not reported as a
+mismatch. String `pattern` is not evaluated for the same reason. Warning
+text uses schema paths and array indexes only, never a result value or a
+key taken from the result. Boolean
+subschemas, including `items: false`, are not evaluated. An empty
+`prefixItems` array is not a valid Draft 2020-12 schema, so registration
+rejects it; omitting `prefixItems` is how a schema declares no tuple
+positions. It does not evaluate `$ref`, `allOf`,
+`anyOf`, `oneOf`, `format`, numeric ranges, or string length, so a mismatch
+that lives only in those keywords stays silent.
 
 Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
 for each tool result next to its input schema. The canonical key is
 `outputSchema`; `output_schema` is an alias, and only one of them may be set.
 `ToolSpec.output_schema` writes `outputSchema`.
 
-`ais-webmcp validate` checks a present output schema: it must be a JSON object
-and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An
-invalid schema fails validation. Omitting the schema does not. The result stays
-`ok`, the exit code stays 0, and each tool without a schema adds a finding:
+`ais-webmcp validate` keeps a missing output schema as a low finding. The
+manifest stays `ok` and the exit code stays 0. A structurally invalid schema
+is an error: the value is not a JSON object (an array, string, number,
+boolean, or null, including a boolean JSON Schema), both `outputSchema` and
+`output_schema` are set, or the object is not a valid Draft 2020-12 schema.
+An empty object is a valid unconstrained schema, not a missing one. Each tool
+without a schema adds a finding:
 
 <!-- markdownlint-disable MD013 -->
 
@@ -117,6 +157,17 @@ Check engines can treat `missing_output_schema` as a low-severity finding.
 Existing hosts keep validating until they declare output schemas. Text reports
 print `finding:` lines and still start with `ok:` when there are no errors.
 
+Tool names, ids, titles, and descriptions that contain invisible or control
+characters are invalid, as are empty or whitespace-only descriptions. A tool
+description over 750 Unicode code points, a schema description over 500, or a
+parameter name over 128 adds a low finding `oversized_schema_field` and stays
+valid. Every report notes that missing WebMCP annotations `readOnlyHint`,
+`untrustedContentHint`, `consequentialHint`, and `debugging` must not be treated
+as safe. These are advisory metadata, not security guarantees. A tool that does not set
+`readOnlyHint` also gets a low finding `hints_not_safety_assurances`.
+The names follow the [WebMCP ToolAnnotations dictionary](https://webmachinelearning.github.io/webmcp/#dictdef-toolannotations).
+`registerTool` is unchanged.
+
 For Django and [Insight UI](https://pypi.org/project/insight-ui/) applications,
 add the insight-ui-webmcp adapter. The core owns the shared schema and browser
 runtime; the adapter uses the installed core rather than shipping a second
@@ -124,11 +175,13 @@ copy.
 
 ## npm package
 
-The browser runtime is published as the public npm package
-`@alpininsightsolutions/webmcp` (from version 0.1.2, the same version as the
-Python package). The tarball contains only the built `register.js`, its
+The browser runtime is prepared as the public npm package
+`@alpininsightsolutions/webmcp`; the first npm release is pending. Once
+published, its version matches the Python package. The tarball contains only the built `register.js`, its
 types, this README, `LICENSE`, and `NOTICE` (`package.json` is included
 because npm always packs it). A tarball guard in CI rejects any other path.
+
+Once published:
 
 ```bash
 npm install @alpininsightsolutions/webmcp
@@ -207,3 +260,5 @@ core's history and existing host pins are preserved.
 
 The repository documents code versus metadata checks, Main CI reuse and the
 central build-once Python publication handoff for maintainers.
+GitHub releases and asset delivery run outside this public repository; see
+[docs/ci-and-release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/ci-and-release.md).

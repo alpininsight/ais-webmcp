@@ -1,6 +1,7 @@
 """Execute the workflow routing and gates without GitHub or publication credentials."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,7 +18,7 @@ METADATA = (
 
 def test_events_and_concurrency_preserve_main_and_isolate_metadata():
     events = WORKFLOW.get("on", WORKFLOW.get(True))
-    assert events["push"]["branches"] == ["main"]
+    assert events["push"]["branches"] == ["develop", "main"]
     assert set(events["pull_request"]["types"]) == {
         "opened",
         "synchronize",
@@ -131,7 +132,11 @@ def test_metadata_quality_gate_requires_explicit_full_evidence():
     assert gate["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
     evidence = next(step for step in gate["steps"] if step.get("id") == "evidence")
     assert evidence["if"] == "needs.classify.outputs.mode == 'metadata'"
-    assert "check_ci_evidence.py" in evidence["run"]
+    assert "base/scripts/check_ci_evidence.py" in evidence["run"]
+    checkout = next(step for step in gate["steps"] if "actions/checkout@" in step.get("uses", ""))
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.base.sha }}"
+    assert checkout["with"]["path"] == "base"
+    assert checkout["with"]["persist-credentials"] is False
     assert "--summary" in evidence["run"]
     assert not evidence.get("continue-on-error")
     assert WORKFLOW["run-name"] == "${{ " + METADATA + " && 'CI metadata' || 'CI full' }}"
@@ -154,3 +159,38 @@ def test_metadata_gate_cannot_pass_without_verified_evidence(outcome):
         capture_output=True,
     )
     assert result.returncode != 0
+
+
+def test_gitleaks_binary_is_hash_pinned_and_pre_commit_has_no_token():
+    install = next(
+        step
+        for step in WORKFLOW["jobs"]["gitleaks"]["steps"]
+        if step.get("name") == "Install Gitleaks"
+    )
+    assert len(install["env"]["GITLEAKS_SHA256"]) == 64
+    assert "sha256sum --check --strict" in install["run"]
+    assert (
+        install["env"]["GITLEAKS_SHA256"]
+        == "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    )
+    for step in WORKFLOW["jobs"]["quality"]["steps"]:
+        if step.get("name") == "Run pre-commit":
+            assert "GH_TOKEN" not in str(step.get("env", {}))
+    root = Path(__file__).resolve().parents[1]
+    if shutil.which("git") is None or not (root / ".git").exists():
+        pytest.skip("needs a git checkout (not available in an sdist)")
+    # CI strips the gitleaks hook from the working copy before pre-commit runs,
+    # so compare against the committed config.
+    pre_commit = yaml.safe_load(
+        subprocess.run(
+            ["git", "show", "HEAD:.pre-commit-config.yaml"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    hook_rev = next(
+        repo["rev"] for repo in pre_commit["repos"] if repo["repo"].endswith("/gitleaks")
+    )
+    assert install["env"]["GITLEAKS_VERSION"] == hook_rev.removeprefix("v")

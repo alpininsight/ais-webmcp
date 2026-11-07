@@ -188,37 +188,3 @@ def test_source_identity_rejects_wrong_repository_or_revision(evidence, repo, sh
     with pytest.raises(ValueError):
         publication.check_source(repo, sha)
     assert evidence["calls"] == []
-
-
-def test_source_workflow_validates_main_even_for_release_false():
-    import yaml
-
-    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    jobs = workflow["jobs"]
-    assert not any(j.get("uses") == "./.github/workflows/ci.yml" for j in jobs.values())
-    source = jobs["source"]
-    assert source["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
-    assert "if" not in source
-    guards = source["steps"]
-    assert "refs/heads/main" in guards[0]["run"] and "uses" not in guards[0]
-    validate = next(s for s in guards if "check_publication.py source" in s.get("run", ""))
-    assert "if" not in validate
-    assert "--require-merged-pr" in validate["run"]
-    assert "source" in (
-        [jobs["version"]["needs"]]
-        if isinstance(jobs["version"]["needs"], str)
-        else jobs["version"]["needs"]
-    )
-    assert set(jobs["release"]["needs"]) == {"source", "version"}
-    if "build" in jobs:
-        assert REPO.endswith("/ais-webmcp")
-        assert jobs["build"]["if"] == "inputs.cdn"
-    handoff = str(jobs["handoff"])
-    for field in [
-        "producer_run_id",
-        "producer_attempt",
-        "artifact_id",
-        "publish=false",
-        "publish=true",
-    ]:
-        assert field in handoff
