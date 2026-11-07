@@ -353,9 +353,11 @@
    * `enum` compare at most 8 nested object or array levels; past that the
    * comparison is skipped and does not warn. `items` applies after
    * `prefixItems`. A key that matches `patternProperties` is not an
-   * unexpected property. `pattern` and `patternProperties` use Unicode
-   * regular expressions. A pattern that does not compile is skipped and
-   * warned once; that is not a mismatch. The warning keeps at most three
+   * unexpected property. Those name patterns use Unicode regular
+   * expressions. String `pattern` is not evaluated: matching it against a
+   * result can block the page. A property-name pattern that does not
+   * compile is skipped and warned once; that is not a mismatch. The warning
+   * keeps at most three
    * paths. Messages name schema paths only, never the result value.
    * Unsupported keywords are skipped, not warned.
    */
@@ -455,15 +457,6 @@
     if (typeof types === "string") {
       types = [types];
     }
-    if (typeof schema.pattern === "string" && typeof value === "string") {
-      var valuePattern = compilePattern(schema.pattern);
-      if (!valuePattern) {
-        noteUncheckedPattern();
-      } else if (!valuePattern.test(value)) {
-        mismatches.push(path + " does not match pattern");
-      }
-    }
-
     if (Array.isArray(types) && types.length && !valueMatchesTypes(types, value)) {
       var declared = [];
       for (var t = 0; t < types.length; t++) {

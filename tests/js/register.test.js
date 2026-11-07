@@ -1540,24 +1540,37 @@ describe("InsightUiWebmcp registerTool contract", () => {
       assert.equal(warnings.length, 1);
       assert.match(warnings[0], /additionalProperties does not allow/);
 
-      warnings.length = 0;
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not evaluate a string pattern", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
       await api.registerTool(
         {
-          id: "one_char",
-          description: "One character",
+          id: "text",
+          description: "Text",
           inputSchema: { type: "object", properties: {} },
-          outputSchema: { type: "string", pattern: "^.$" },
-          execute: async (input) => input.value,
+          outputSchema: { type: "string", pattern: "^(a+)+$" },
+          execute: async () => "a".repeat(28) + "!",
         },
         { validateOutput: true },
       );
-      const text = ctx.registerCalls[1].tool;
-      assert.equal(await text.execute({ value: "😀" }), "😀");
+      const started = Date.now();
+      assert.equal(
+        await ctx.registerCalls[0].tool.execute({}),
+        "a".repeat(28) + "!",
+      );
+      assert.ok(Date.now() - started < 200);
       assert.equal(warnings.length, 0);
-      assert.equal(await text.execute({ value: "ab" }), "ab");
-      assert.equal(warnings.length, 1);
-      assert.match(warnings[0], /does not match pattern/);
-      assert.equal(warnings[0].includes("ab"), false);
     } finally {
       console.warn = previous;
     }
@@ -1574,22 +1587,6 @@ describe("InsightUiWebmcp registerTool contract", () => {
     try {
       await api.registerTool(
         {
-          id: "broken",
-          description: "Broken pattern",
-          inputSchema: { type: "object", properties: {} },
-          outputSchema: { type: "string", pattern: "(" },
-          execute: async () => "ok",
-        },
-        { validateOutput: true },
-      );
-      assert.equal(await ctx.registerCalls[0].tool.execute({}), "ok");
-      assert.equal(await ctx.registerCalls[0].tool.execute({}), "ok");
-      assert.equal(warnings.length, 1);
-      assert.match(warnings[0], /not checked/);
-      assert.equal(warnings[0].includes("does not match"), false);
-
-      await api.registerTool(
-        {
           id: "broken_keys",
           description: "Broken key pattern",
           inputSchema: { type: "object", properties: {} },
@@ -1602,8 +1599,10 @@ describe("InsightUiWebmcp registerTool contract", () => {
         },
         { validateOutput: true },
       );
-      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), { a: "ok" });
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), { a: "ok" });
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), { a: "ok" });
       assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /not checked/);
       assert.equal(warnings[0].includes("additionalProperties"), false);
     } finally {
       console.warn = previous;
@@ -1629,8 +1628,8 @@ describe("InsightUiWebmcp registerTool contract", () => {
             additionalProperties: false,
             properties: { name: { type: "string" } },
             patternProperties: {
-              "^n": { type: "string" },
-              "e$": { type: "string" },
+              "^n": { enum: ["ok", "end"] },
+              e$: { const: "ok" },
             },
           },
           execute: async (input) => input.value,
@@ -1642,6 +1641,25 @@ describe("InsightUiWebmcp registerTool contract", () => {
         name: "ok",
       });
       assert.equal(warnings.length, 0);
+
+      assert.deepEqual(await tool.execute({ value: { name: "end" } }), {
+        name: "end",
+      });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /does not match const/);
+      assert.equal(warnings[0].includes("not in enum"), false);
+      assert.equal(warnings[0].includes("expected string"), false);
+
+      warnings.length = 0;
+      assert.deepEqual(await tool.execute({ value: { name: "no" } }), {
+        name: "no",
+      });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /not in enum/);
+      assert.match(warnings[0], /does not match const/);
+      assert.equal(warnings[0].includes("expected string"), false);
+
+      warnings.length = 0;
       assert.deepEqual(await tool.execute({ value: { name: 1 } }), { name: 1 });
       assert.equal(warnings.length, 1);
       assert.match(warnings[0], /expected string/);

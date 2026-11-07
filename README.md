@@ -114,9 +114,11 @@ prefix. Every remaining array element is checked; a warning lists at most
 three paths.
 `const` and `enum` compare nested objects and arrays up to 8 levels. Past
 that the comparison is skipped, so a deep value is not reported as a
-mismatch. String `pattern` and `patternProperties` use a Unicode regular
-expression, so a pattern counts code points. A pattern that does not compile
-is skipped and warned once; that warning is not a mismatch. Boolean
+mismatch. `patternProperties` names use a Unicode regular expression, so
+a name pattern counts code points. A property-name pattern that does not
+compile is skipped and warned once; that warning is not a mismatch. String
+`pattern` is not evaluated, because matching it against a result string can
+block the page. Boolean
 subschemas, including `items: false`, are not evaluated. An empty
 `prefixItems` array is not a valid Draft 2020-12 schema, so registration
 rejects it; omitting `prefixItems` is how a schema declares no tuple
