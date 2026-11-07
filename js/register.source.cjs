@@ -13,8 +13,15 @@
  * - Tool payload uses `name` (id) + optional `title` (human label) and
  *   `annotations.*Hint` — never a top-level `consequential` boolean.
  * - `outputSchema` (alias `output_schema`) is optional. When set it must be
- *   one JSON Schema object and is copied onto the registered tool. Omission
- *   still registers; manifest validation reports that as a low finding.
+ *   one JSON Schema object and is passed to registerTool unchanged
+ *   (Chrome 159+). If the browser rejects that member as unsupported, the
+ *   tool is registered again without it. Omission still registers; manifest
+ *   validation reports that as a low finding. A structurally invalid schema
+ *   is rejected before registerTool.
+ * - `options.validateOutput === true` compares the execute result to
+ *   outputSchema and console.warns on mismatch. The result is never rejected.
+ *   The check is off by default and is not a full JSON Schema validator.
+ *   Upstream mismatch behavior is still open (webmachinelearning/webmcp#92).
  * - Tool names, titles, and descriptions reject invisible or control
  *   characters. A whitespace-only description is rejected.
  * - Missing readOnlyHint is stored as false only when the tool is not
@@ -33,6 +40,13 @@
   var API_NAME = "InsightUiWebmcp";
   /** @type {Map<string, AbortController>} */
   var controllersByName = new Map();
+  // null until a registration shows whether this document accepts outputSchema.
+  // true: the member was accepted. false: omit it. Chrome 159+ accepts it.
+  // Older WebIDL dictionaries ignore unknown members, so they stay on true
+  // after a successful call that included the schema.
+  var outputSchemaAccepted = null;
+  /** @type {Set<string>} */
+  var warnedOutputMismatches = new Set();
 
   // Tool names: 1..128 chars of [A-Za-z0-9_.-] (WebMCP draft).
   var TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -221,6 +235,289 @@
     }
   }
 
+  var JSON_SCHEMA_TYPES = {
+    object: true,
+    array: true,
+    string: true,
+    number: true,
+    integer: true,
+    boolean: true,
+    null: true,
+  };
+
+  function sameJson(left, right, depth) {
+    if (left === right) {
+      return true;
+    }
+    if (!depth || depth < 0) {
+      return false;
+    }
+    if (left === null || right === null) {
+      return false;
+    }
+    if (typeof left !== "object" || typeof right !== "object") {
+      return false;
+    }
+    var leftArray = Array.isArray(left);
+    var rightArray = Array.isArray(right);
+    if (leftArray !== rightArray) {
+      return false;
+    }
+    if (leftArray) {
+      if (left.length !== right.length) {
+        return false;
+      }
+      for (var i = 0; i < left.length; i++) {
+        if (!sameJson(left[i], right[i], depth - 1)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    var keys = Object.keys(left);
+    if (keys.length !== Object.keys(right).length) {
+      return false;
+    }
+    for (var k = 0; k < keys.length; k++) {
+      if (!Object.prototype.hasOwnProperty.call(right, keys[k])) {
+        return false;
+      }
+      if (!sameJson(left[keys[k]], right[keys[k]], depth - 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * @returns {boolean|null} null when `type` is not a JSON Schema type we check
+   */
+  function jsonTypeMatches(type, value) {
+    switch (type) {
+      case "object":
+        return (
+          value !== null && typeof value === "object" && !Array.isArray(value)
+        );
+      case "array":
+        return Array.isArray(value);
+      case "string":
+        return typeof value === "string";
+      case "number":
+        return typeof value === "number" && Number.isFinite(value);
+      case "integer":
+        return typeof value === "number" && Number.isInteger(value);
+      case "boolean":
+        return typeof value === "boolean";
+      case "null":
+        return value === null;
+      default:
+        return null;
+    }
+  }
+
+  function valueMatchesTypes(types, value) {
+    var sawKnown = false;
+    for (var i = 0; i < types.length; i++) {
+      var matched = jsonTypeMatches(types[i], value);
+      if (matched === null) {
+        continue;
+      }
+      sawKnown = true;
+      if (matched === true) {
+        return true;
+      }
+    }
+    return sawKnown ? false : true;
+  }
+
+  /**
+   * Lightweight outputSchema check. Not Draft 2020-12 instance validation:
+   * `$ref`, combinators, pattern, format, ranges, and string length are
+   * ignored. Boolean subschemas are ignored. Depth is capped at 8.
+   * Messages name schema paths only, never the result value.
+   */
+  function collectOutputMismatches(schema, value, path, depth, seen, mismatches) {
+    if (mismatches.length >= 3 || depth > 8) {
+      return;
+    }
+    if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+      return;
+    }
+    if (seen.indexOf(schema) >= 0) {
+      return;
+    }
+    seen.push(schema);
+
+    if (
+      Object.prototype.hasOwnProperty.call(schema, "const") &&
+      !sameJson(schema.const, value, 8)
+    ) {
+      mismatches.push(path + " does not match const");
+    }
+    if (Array.isArray(schema.enum)) {
+      var inEnum = false;
+      for (var e = 0; e < schema.enum.length; e++) {
+        if (sameJson(schema.enum[e], value, 8)) {
+          inEnum = true;
+          break;
+        }
+      }
+      if (!inEnum) {
+        mismatches.push(path + " is not in enum");
+      }
+    }
+
+    var types = schema.type;
+    if (typeof types === "string") {
+      types = [types];
+    }
+    if (Array.isArray(types) && types.length && !valueMatchesTypes(types, value)) {
+      var declared = [];
+      for (var t = 0; t < types.length; t++) {
+        if (JSON_SCHEMA_TYPES[types[t]] === true) {
+          declared.push(types[t]);
+        }
+      }
+      if (declared.length) {
+        mismatches.push(path + " expected " + declared.join("|"));
+      }
+    }
+
+    var isObject =
+      value !== null && typeof value === "object" && !Array.isArray(value);
+    if (isObject && Array.isArray(schema.required)) {
+      for (var r = 0; r < schema.required.length && mismatches.length < 3; r++) {
+        var req = schema.required[r];
+        if (
+          typeof req === "string" &&
+          !Object.prototype.hasOwnProperty.call(value, req)
+        ) {
+          mismatches.push(path + "." + req + " is required");
+        }
+      }
+    }
+    if (
+      isObject &&
+      schema.additionalProperties === false &&
+      schema.properties &&
+      typeof schema.properties === "object" &&
+      !Array.isArray(schema.properties)
+    ) {
+      var valueKeys = Object.keys(value);
+      for (var a = 0; a < valueKeys.length; a++) {
+        if (!Object.prototype.hasOwnProperty.call(schema.properties, valueKeys[a])) {
+          mismatches.push(path + " has a property outside outputSchema.properties");
+          break;
+        }
+      }
+    }
+    if (
+      isObject &&
+      schema.properties &&
+      typeof schema.properties === "object" &&
+      !Array.isArray(schema.properties)
+    ) {
+      var propNames = Object.keys(schema.properties);
+      for (var p = 0; p < propNames.length && mismatches.length < 3; p++) {
+        if (Object.prototype.hasOwnProperty.call(value, propNames[p])) {
+          collectOutputMismatches(
+            schema.properties[propNames[p]],
+            value[propNames[p]],
+            path + "." + propNames[p],
+            depth + 1,
+            seen,
+            mismatches,
+          );
+        }
+      }
+    }
+    if (
+      Array.isArray(value) &&
+      schema.items &&
+      typeof schema.items === "object" &&
+      !Array.isArray(schema.items)
+    ) {
+      var limit = value.length < 20 ? value.length : 20;
+      for (var n = 0; n < limit && mismatches.length < 3; n++) {
+        collectOutputMismatches(
+          schema.items,
+          value[n],
+          path + "[" + n + "]",
+          depth + 1,
+          seen,
+          mismatches,
+        );
+      }
+    }
+
+    seen.pop();
+  }
+
+  function warnOutputMismatch(name, schema, value) {
+    try {
+      var mismatches = [];
+      collectOutputMismatches(schema, value, "$", 0, [], mismatches);
+      if (!mismatches.length) {
+        return;
+      }
+      var summary = mismatches.slice(0, 3).join("; ");
+      var key = String(name) + "\0" + summary;
+      if (warnedOutputMismatches.has(key)) {
+        return;
+      }
+      warnedOutputMismatches.add(key);
+      if (global.console && typeof global.console.warn === "function") {
+        global.console.warn(
+          "InsightUiWebmcp: tool " +
+            JSON.stringify(name) +
+            " result does not match outputSchema (" +
+            summary +
+            "). The result was returned anyway.",
+        );
+      }
+    } catch (_err) {
+      /* advisory only */
+    }
+  }
+
+  /**
+   * True when registerTool rejected outputSchema as a dictionary member
+   * this browser does not implement. Invalid-schema failures stay visible.
+   */
+  function outputSchemaMemberRejected(err) {
+    var message = err && err.message != null ? String(err.message) : "";
+    if (message.indexOf("outputSchema") < 0) {
+      return false;
+    }
+    var rest = message.split("outputSchema").join("");
+    if (
+      /circular|JSON\.stringify|seriali[sz]e|valid JSON|invalid schema|Unexpected token|Draft/i.test(
+        rest,
+      )
+    ) {
+      return false;
+    }
+    return /unexpected|unknown property|unsupported|not supported|extraneous|not a valid dictionary member/i.test(
+      message,
+    );
+  }
+
+  function toolWithoutOutputSchema(tool) {
+    if (!Object.prototype.hasOwnProperty.call(tool, "outputSchema")) {
+      return null;
+    }
+    var copy = Object.assign({}, tool);
+    delete copy.outputSchema;
+    return copy;
+  }
+
+  function toolForBrowser(tool) {
+    if (outputSchemaAccepted === false) {
+      return toolWithoutOutputSchema(tool) || tool;
+    }
+    return tool;
+  }
+
   /**
    * Normalize host execute handlers for the WebMCP callback shape (#8).
    *
@@ -232,10 +529,15 @@
    * scroll, submit, or fetch; this wrapper cannot undo work they already did.
    * Registration abort does not cancel in-flight execute.
    *
+   * When `outputCheck` is set, a resolved result is compared to outputSchema.
+   * A mismatch or a throw inside that check only warns. The resolved value
+   * is unchanged.
+   *
    * @param {function} handler
+   * @param {{name: string, schema: object}|null} outputCheck
    * @returns {function}
    */
-  function wrapExecute(handler) {
+  function wrapExecute(handler, outputCheck) {
     return function execute(input, options) {
       var opts = options && typeof options === "object" ? options : {};
       var signal = opts.signal;
@@ -277,6 +579,9 @@
             signal.removeEventListener("abort", onAbort);
           }
           if (result.ok) {
+            if (outputCheck) {
+              warnOutputMismatch(outputCheck.name, outputCheck.schema, result.value);
+            }
             resolve(result.value);
           } else {
             reject(result.err);
@@ -390,9 +695,10 @@
   /**
    * Validate and map a host/manifest tool into a ModelContextTool dictionary.
    * @param {object} spec
+   * @param {boolean} [validateOutput] Dev-only result check. Never rejects.
    * @returns {{ ok: true, tool: object, name: string } | { ok: false, error: string, name?: string }}
    */
-  function buildToolPayload(spec) {
+  function buildToolPayload(spec, validateOutput) {
     if (!spec || typeof spec !== "object") {
       return { ok: false, error: "tool spec must be an object" };
     }
@@ -553,10 +859,18 @@
       };
     }
 
+    // Same object the host passed. Do not clone or rewrite it.
+    var outputSchema =
+      outputKeys.length === 1 ? spec[outputKeys[0]] : undefined;
     var tool = {
       name: name,
       description: description,
-      execute: wrapExecute(spec.execute),
+      execute: wrapExecute(
+        spec.execute,
+        validateOutput === true && outputSchema
+          ? { name: name, schema: outputSchema }
+          : null,
+      ),
     };
     if (title) {
       tool.title = title;
@@ -566,8 +880,8 @@
     if (inputSchema && typeof inputSchema === "object") {
       tool.inputSchema = inputSchema;
     }
-    if (outputKeys.length === 1) {
-      tool.outputSchema = spec[outputKeys[0]];
+    if (outputSchema) {
+      tool.outputSchema = outputSchema;
     }
 
     var annotations = buildAnnotations(spec);
@@ -585,13 +899,15 @@
    * @param {object} spec Host tool spec (id/name/title/description/execute/…)
    * @param {object} [options]
    * @param {AbortSignal} [options.signal] Optional external signal; abort unregisters.
+   * @param {boolean} [options.validateOutput] Warn when the result misses outputSchema.
+   *   Off by default. Never rejects the tool result.
    * @returns {Promise<{ok: boolean, name?: string, error?: string}>}
    */
   function registerTool(spec, options) {
     options = options || {};
 
     return Promise.resolve().then(function () {
-      var built = buildToolPayload(spec);
+      var built = buildToolPayload(spec, options.validateOutput);
       if (!built.ok) {
         return { ok: false, name: built.name, error: built.error };
       }
@@ -635,13 +951,12 @@
       controllersByName.set(built.name, controller);
 
       var registerOpts = { signal: controller.signal };
+      var payload = toolForBrowser(built.tool);
 
-      // A synchronous throw must not escape as an uncaught rejection.
-      var pending;
-      try {
-        pending = ctx.registerTool(built.tool, registerOpts);
-      } catch (err) {
-        controllersByName.delete(built.name);
+      function registrationError(err, fallback) {
+        if (controllersByName.get(built.name) === controller) {
+          controllersByName.delete(built.name);
+        }
         try {
           controller.abort();
         } catch (_thrown) {
@@ -650,40 +965,66 @@
         return {
           ok: false,
           name: built.name,
-          error:
-            err && err.message ? String(err.message) : "registerTool threw",
+          error: err && err.message ? String(err.message) : fallback,
         };
       }
 
-      return Promise.resolve(pending).then(
-        function () {
-          if (controller.signal.aborted) {
-            if (controllersByName.get(built.name) === controller)
-              controllersByName.delete(built.name);
-            return {
-              ok: false,
-              name: built.name,
-              error: "registration aborted before completion",
-            };
-          }
-          return { ok: true, name: built.name };
-        },
-        function (err) {
-          if (controllersByName.get(built.name) === controller)
+      function registrationSuccess() {
+        if (controller.signal.aborted) {
+          if (controllersByName.get(built.name) === controller) {
             controllersByName.delete(built.name);
-          try {
-            controller.abort();
-          } catch (_a) {
-            /* ignore */
           }
           return {
             ok: false,
             name: built.name,
-            error:
-              err && err.message
-                ? String(err.message)
-                : "registerTool promise rejected",
+            error: "registration aborted before completion",
           };
+        }
+        return { ok: true, name: built.name };
+      }
+
+      // A synchronous throw must not escape as an uncaught rejection.
+      function invokeRegister(tool) {
+        return new Promise(function (resolve, reject) {
+          var pending;
+          try {
+            pending = ctx.registerTool(tool, registerOpts);
+          } catch (err) {
+            reject({ err: err, fallback: "registerTool threw" });
+            return;
+          }
+          Promise.resolve(pending).then(resolve, function (err) {
+            reject({ err: err, fallback: "registerTool promise rejected" });
+          });
+        });
+      }
+
+      return invokeRegister(payload).then(
+        function () {
+          if (
+            !controller.signal.aborted &&
+            Object.prototype.hasOwnProperty.call(payload, "outputSchema")
+          ) {
+            outputSchemaAccepted = true;
+          }
+          return registrationSuccess();
+        },
+        function (failure) {
+          var retry = toolWithoutOutputSchema(payload);
+          if (!retry || !outputSchemaMemberRejected(failure.err)) {
+            return registrationError(failure.err, failure.fallback);
+          }
+          // Remember before the retry so a later tool does not pay the
+          // rejected call. The schema stays on the execute wrapper.
+          outputSchemaAccepted = false;
+          return invokeRegister(retry).then(
+            function () {
+              return registrationSuccess();
+            },
+            function (retryFailure) {
+              return registrationError(retryFailure.err, retryFailure.fallback);
+            },
+          );
         },
       );
     });
@@ -737,6 +1078,7 @@
    * @param {object} [handlers] map of tool id -> execute function
    * @param {object} [options]
    * @param {AbortSignal} [options.signal] shared lifecycle signal for all tools
+   * @param {boolean} [options.validateOutput] Passed to each registerTool.
    * @returns {Promise<{registered: number, results: Array, errors: Array}>}
    */
   function registerFromManifest(manifest, handlers, options) {
@@ -801,7 +1143,10 @@
             spec.execute = handlers[id];
           }
 
-          return registerTool(spec, { signal: options.signal }).then(
+          return registerTool(spec, {
+            signal: options.signal,
+            validateOutput: options.validateOutput,
+          }).then(
             function (result) {
               acc.results.push(result);
               if (result.ok) {

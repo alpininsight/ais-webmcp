@@ -87,7 +87,7 @@
         },
         "outputSchema": {
           "$ref": "#/$defs/outputSchema",
-          "description": "Draft 2020-12 JSON Schema for the tool result. Recommended. Omission is valid and is reported as finding code missing_output_schema at severity low."
+          "description": "Draft 2020-12 JSON Schema for the tool result. Recommended. Omission is valid and is reported as finding code missing_output_schema at severity low. A non-object value, both output schema keys, or an object that is not a valid Draft 2020-12 schema is an error."
         },
         "output_schema": {
           "$ref": "#/$defs/outputSchema",

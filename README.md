@@ -86,19 +86,42 @@ explicitly enables and implements them.
 [webmachinelearning/webmcp#254](https://github.com/webmachinelearning/webmcp/pull/254)
 (merged 2026-11-02, closing
 [webmachinelearning/webmcp#9](https://github.com/webmachinelearning/webmcp/issues/9)),
-modelled on MCP `Tool.outputSchema`. `ais-webmcp` supports and validates it;
-a missing schema is reported as a low-severity hint. Browser support may lag
-behind the draft.
+modelled on MCP `Tool.outputSchema`. Chrome 159 and later
+(from 159.0.8140.0) accept it on `document.modelContext.registerTool()`.
+`register.js` passes that object through unchanged. If registration fails
+because the browser reports `outputSchema` as an unexpected or unsupported
+member, the helper registers the tool once more without the member so older
+browsers still succeed. A failure that says the schema itself is invalid is
+not retried. WebIDL dictionaries ignore unknown members, which is how current
+older Chrome builds behave.
+
+What the browser should do when a tool result does not match `outputSchema`
+is still open in
+[webmachinelearning/webmcp#92](https://github.com/webmachinelearning/webmcp/issues/92).
+This helper never rejects a result for that reason. For development, pass
+`validateOutput: true` to `registerTool` or `registerFromManifest`. A mismatch
+writes a `console.warn` and the original result is returned. The same mismatch
+for the same tool warns once. The option is off by default, so a production
+registration does not warn and does not block.
+The check is not a full JSON Schema validator and does not add one to the
+page. It covers `type` (including `integer` and a list of types), `required`,
+`properties`, `items`, `enum`, `const`, and `additionalProperties: false`.
+It does not evaluate `$ref`, `allOf`, `anyOf`, `oneOf`, `pattern`, `format`,
+numeric ranges, or string length, so a mismatch that lives only in those
+keywords stays silent.
 
 Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
 for each tool result next to its input schema. The canonical key is
 `outputSchema`; `output_schema` is an alias, and only one of them may be set.
 `ToolSpec.output_schema` writes `outputSchema`.
 
-`ais-webmcp validate` checks a present output schema: it must be a JSON object
-and a valid [Draft 2020-12](https://json-schema.org/draft/2020-12) schema. An
-invalid schema fails validation. Omitting the schema does not. The result stays
-`ok`, the exit code stays 0, and each tool without a schema adds a finding:
+`ais-webmcp validate` keeps a missing output schema as a low finding. The
+manifest stays `ok` and the exit code stays 0. A structurally invalid schema
+is an error: the value is not a JSON object (an array, string, number,
+boolean, or null, including a boolean JSON Schema), both `outputSchema` and
+`output_schema` are set, or the object is not a valid Draft 2020-12 schema.
+An empty object is a valid unconstrained schema, not a missing one. Each tool
+without a schema adds a finding:
 
 <!-- markdownlint-disable MD013 -->
 
