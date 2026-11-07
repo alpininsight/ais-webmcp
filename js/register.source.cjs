@@ -245,12 +245,18 @@
     null: true,
   };
 
+  /**
+   * @returns {boolean|null} null when nesting is past the depth cap.
+   *   Callers must not treat null as a mismatch.
+   */
   function sameJson(left, right, depth) {
     if (left === right) {
       return true;
     }
+    // Past the cap the values are unknown. Returning false here warned for
+    // equal structures that were only separately allocated.
     if (!depth || depth < 0) {
-      return false;
+      return null;
     }
     if (left === null || right === null) {
       return false;
@@ -263,16 +269,21 @@
     if (leftArray !== rightArray) {
       return false;
     }
+    var unknown = false;
     if (leftArray) {
       if (left.length !== right.length) {
         return false;
       }
       for (var i = 0; i < left.length; i++) {
-        if (!sameJson(left[i], right[i], depth - 1)) {
+        var item = sameJson(left[i], right[i], depth - 1);
+        if (item === false) {
           return false;
         }
+        if (item === null) {
+          unknown = true;
+        }
       }
-      return true;
+      return unknown ? null : true;
     }
     var keys = Object.keys(left);
     if (keys.length !== Object.keys(right).length) {
@@ -282,11 +293,15 @@
       if (!Object.prototype.hasOwnProperty.call(right, keys[k])) {
         return false;
       }
-      if (!sameJson(left[keys[k]], right[keys[k]], depth - 1)) {
+      var child = sameJson(left[keys[k]], right[keys[k]], depth - 1);
+      if (child === false) {
         return false;
       }
+      if (child === null) {
+        unknown = true;
+      }
     }
-    return true;
+    return unknown ? null : true;
   }
 
   /**
@@ -333,8 +348,11 @@
   /**
    * Lightweight outputSchema check. Not Draft 2020-12 instance validation:
    * `$ref`, combinators, pattern, format, ranges, and string length are
-   * ignored. Boolean subschemas are ignored. Depth is capped at 8.
-   * Messages name schema paths only, never the result value.
+   * ignored. Boolean subschemas are ignored. `const` and `enum` compare at
+   * most 8 nested object or array levels; past that the comparison is
+   * skipped and does not warn. `items` is checked for every element, and
+   * the warning keeps at most three paths. Messages name schema paths only,
+   * never the result value.
    */
   function collectOutputMismatches(schema, value, path, depth, seen, mismatches) {
     if (mismatches.length >= 3 || depth > 8) {
@@ -348,21 +366,25 @@
     }
     seen.push(schema);
 
-    if (
-      Object.prototype.hasOwnProperty.call(schema, "const") &&
-      !sameJson(schema.const, value, 8)
-    ) {
-      mismatches.push(path + " does not match const");
+    if (Object.prototype.hasOwnProperty.call(schema, "const")) {
+      if (sameJson(schema.const, value, 8) === false) {
+        mismatches.push(path + " does not match const");
+      }
     }
     if (Array.isArray(schema.enum)) {
       var inEnum = false;
+      var enumUnknown = false;
       for (var e = 0; e < schema.enum.length; e++) {
-        if (sameJson(schema.enum[e], value, 8)) {
+        var enumMatch = sameJson(schema.enum[e], value, 8);
+        if (enumMatch === true) {
           inEnum = true;
           break;
         }
+        if (enumMatch === null) {
+          enumUnknown = true;
+        }
       }
-      if (!inEnum) {
+      if (!inEnum && !enumUnknown) {
         mismatches.push(path + " is not in enum");
       }
     }
@@ -396,17 +418,24 @@
         }
       }
     }
-    if (
-      isObject &&
-      schema.additionalProperties === false &&
-      schema.properties &&
-      typeof schema.properties === "object" &&
-      !Array.isArray(schema.properties)
-    ) {
+    if (isObject && schema.additionalProperties === false) {
+      var allowed = null;
+      if (
+        schema.properties &&
+        typeof schema.properties === "object" &&
+        !Array.isArray(schema.properties)
+      ) {
+        allowed = schema.properties;
+      }
       var valueKeys = Object.keys(value);
       for (var a = 0; a < valueKeys.length; a++) {
-        if (!Object.prototype.hasOwnProperty.call(schema.properties, valueKeys[a])) {
-          mismatches.push(path + " has a property outside outputSchema.properties");
+        if (
+          !allowed ||
+          !Object.prototype.hasOwnProperty.call(allowed, valueKeys[a])
+        ) {
+          mismatches.push(
+            path + " has a property that additionalProperties does not allow",
+          );
           break;
         }
       }
@@ -437,8 +466,7 @@
       typeof schema.items === "object" &&
       !Array.isArray(schema.items)
     ) {
-      var limit = value.length < 20 ? value.length : 20;
-      for (var n = 0; n < limit && mismatches.length < 3; n++) {
+      for (var n = 0; n < value.length && mismatches.length < 3; n++) {
         collectOutputMismatches(
           schema.items,
           value[n],

@@ -106,9 +106,14 @@ registration does not warn and does not block.
 The check is not a full JSON Schema validator and does not add one to the
 page. It covers `type` (including `integer` and a list of types), `required`,
 `properties`, `items`, `enum`, `const`, and `additionalProperties: false`.
-It does not evaluate `$ref`, `allOf`, `anyOf`, `oneOf`, `pattern`, `format`,
-numeric ranges, or string length, so a mismatch that lives only in those
-keywords stays silent.
+`additionalProperties: false` warns for any own property when `properties`
+is omitted. Every array element is checked against `items`; a warning lists at most
+three paths.
+`const` and `enum` compare nested objects and arrays up to 8 levels. Past
+that the comparison is skipped, so a deep value is not reported as a
+mismatch. It does not evaluate `$ref`, `allOf`, `anyOf`, `oneOf`, `pattern`,
+`format`, numeric ranges, or string length, so a mismatch that lives only in
+those keywords stays silent.
 
 Declare a [Draft 2020-12 JSON Schema](https://json-schema.org/draft/2020-12)
 for each tool result next to its input schema. The canonical key is

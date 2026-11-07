@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `validateOutput` checks every array element, treats
+  `additionalProperties: false` without `properties` as an empty allow-list,
+  and does not warn when a `const` or `enum` comparison passes its nesting
+  cap.
 - Pass `outputSchema` through to `document.modelContext.registerTool()`
   unchanged. Chrome 159 and later accept it. If the browser rejects the
   member as unsupported, registration is retried once without it. Optional

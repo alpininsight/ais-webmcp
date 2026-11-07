@@ -1423,6 +1423,136 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
+  function nest(levels, leaf) {
+    let node = leaf;
+    for (let i = 0; i < levels; i += 1) {
+      node = { n: node };
+    }
+    return node;
+  }
+
+  it("warns for additionalProperties false when properties is omitted", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "closed",
+          description: "Closed",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "object", additionalProperties: false },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      assert.deepEqual(await tool.execute({ value: {} }), {});
+      assert.equal(warnings.length, 0);
+      const extra = { extra: 1 };
+      assert.deepEqual(await tool.execute({ value: extra }), extra);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /additionalProperties does not allow/);
+      assert.equal(warnings[0].includes("extra"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("checks items past the twentieth array element", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "rows",
+          description: "Rows",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "array", items: { type: "string" } },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const good = Array.from({ length: 25 }, () => "ok");
+      assert.deepEqual(await tool.execute({ rows: good }), good);
+      assert.equal(warnings.length, 0);
+      const bad = good.slice();
+      bad[20] = 1;
+      assert.deepEqual(await tool.execute({ rows: bad }), bad);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[20\] expected string/);
+      assert.equal(warnings[0].includes("1"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not warn when a deep const or enum value is equal", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const deep = nest(9, { v: 1 });
+    const same = nest(9, { v: 1 });
+    try {
+      await api.registerTool(
+        {
+          id: "deep_const",
+          description: "Deep const",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { const: deep },
+          execute: async () => same,
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), same);
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "deep_enum",
+          description: "Deep enum",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { enum: [nest(9, { v: 1 })] },
+          execute: async () => nest(9, { v: 1 }),
+        },
+        { validateOutput: true },
+      );
+      await ctx.registerCalls[1].tool.execute({});
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "shallow",
+          description: "Shallow",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { const: { n: 1 }, enum: [{ n: 1 }] },
+          execute: async () => ({ n: 2 }),
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[2].tool.execute({}), { n: 2 });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /does not match const/);
+      assert.match(warnings[0], /not in enum/);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
   it("a throwing console.warn does not reject the tool result", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
