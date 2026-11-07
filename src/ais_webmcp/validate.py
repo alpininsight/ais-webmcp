@@ -20,14 +20,14 @@ from jsonschema.exceptions import SchemaError
 
 # Recorded on every result. The validator does not execute tools (issue #11).
 LIFECYCLE_NOTE = "unregister is AbortController / { signal } on registerTool, not unregisterTool"
-# Omitted hints are not assurances. destructiveHint and openWorldHint are the
-# upstream names; this package stores side effects as consequentialHint.
+# Omitted annotations are not assurances. Use the WebMCP ToolAnnotations names,
+# rather than the differently named annotations from the MCP server protocol.
 HINTS_NOT_SAFE_CODE = "hints_not_safety_assurances"
 HINTS_NOT_SAFE_SEVERITY = "low"
 HINTS_NOT_SAFE_MESSAGE = (
-    "Missing hints (readOnlyHint, destructiveHint, openWorldHint) must not be treated as safe. "
-    "Omission is not an assurance. This package stores side effects as consequentialHint "
-    "and does not treat a missing hint as a safe default."
+    "Missing WebMCP annotations (readOnlyHint, untrustedContentHint, consequentialHint, debugging) "
+    "must not be treated as safe. Annotations are advisory; omission is not an assurance. "
+    "A missing hint is not a safe default."
 )
 HINTS_NOTE = HINTS_NOT_SAFE_MESSAGE
 INVISIBLE_OR_CONTROL_MESSAGE = "contains an invisible or control character"
