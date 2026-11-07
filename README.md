@@ -161,10 +161,12 @@ Tool names, ids, titles, and descriptions that contain invisible or control
 characters are invalid, as are empty or whitespace-only descriptions. A tool
 description over 750 Unicode code points, a schema description over 500, or a
 parameter name over 128 adds a low finding `oversized_schema_field` and stays
-valid. Every report notes that missing `readOnlyHint`, `destructiveHint`, and
-`openWorldHint` must not be treated as safe. A tool that does not set
+valid. Every report notes that missing WebMCP annotations `readOnlyHint`,
+`untrustedContentHint`, `consequentialHint`, and `debugging` must not be treated
+as safe. These are advisory metadata, not security guarantees. A tool that does not set
 `readOnlyHint` also gets a low finding `hints_not_safety_assurances`.
-Side effects are stored as `consequentialHint`. `registerTool` is unchanged.
+The names follow the [WebMCP ToolAnnotations dictionary](https://webmachinelearning.github.io/webmcp/#dictdef-toolannotations).
+`registerTool` is unchanged.
 
 For Django and [Insight UI](https://pypi.org/project/insight-ui/) applications,
 add the insight-ui-webmcp adapter. The core owns the shared schema and browser

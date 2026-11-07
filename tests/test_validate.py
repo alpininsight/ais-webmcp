@@ -707,8 +707,10 @@ def test_missing_hints_are_not_treated_as_safe() -> None:
     assert finding.code == HINTS_NOT_SAFE_CODE
     assert finding.severity == HINTS_NOT_SAFE_SEVERITY
     assert finding.message == HINTS_NOT_SAFE_MESSAGE
-    for hint in ("readOnlyHint", "destructiveHint", "openWorldHint"):
+    for hint in ("readOnlyHint", "untrustedContentHint", "consequentialHint", "debugging"):
         assert hint in finding.message
+    for foreign_hint in ("destructiveHint", "openWorldHint"):
+        assert foreign_hint not in finding.message
     assert "must not be treated as safe" in finding.message
     assert HINTS_NOTE in result.notes
     text = render_text([result])
