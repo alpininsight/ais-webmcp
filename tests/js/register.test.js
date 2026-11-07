@@ -1497,6 +1497,41 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
+  it("lists at most three paths when more items mismatch", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "rows",
+          description: "Rows",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "array", items: { type: "string" } },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const rows = [0, 1, 2, 3, 4];
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({ rows }), rows);
+      assert.equal(warnings.length, 1);
+      const listed = warnings[0].match(/\$\[\d+\] expected string/g) || [];
+      assert.deepEqual(listed, [
+        "$[0] expected string",
+        "$[1] expected string",
+        "$[2] expected string",
+      ]);
+      assert.equal(warnings[0].includes("$[3]"), false);
+      assert.equal(warnings[0].includes("$[4]"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
   it("does not warn when a deep const or enum value is equal", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
