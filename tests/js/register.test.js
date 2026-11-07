@@ -1423,6 +1423,43 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
+  /**
+   * Fail the output check if it builds or runs a regular expression.
+   * Construction and exec/test throw instead of calling the real RegExp,
+   * so a schema pattern cannot block the test thread.
+   */
+  async function withoutRegExp(run) {
+    const RealRegExp = globalThis.RegExp;
+    const realTest = RealRegExp.prototype.test;
+    const realExec = RealRegExp.prototype.exec;
+    const constructed = [];
+    const executed = [];
+    function SpyRegExp() {
+      constructed.push(arguments.length ? String(arguments[0]) : "");
+      throw new Error("RegExp constructed during output check");
+    }
+    SpyRegExp.prototype = RealRegExp.prototype;
+    globalThis.RegExp = SpyRegExp;
+    RealRegExp.prototype.test = function () {
+      executed.push("test");
+      throw new Error("RegExp.test during output check");
+    };
+    RealRegExp.prototype.exec = function () {
+      executed.push("exec");
+      throw new Error("RegExp.exec during output check");
+    };
+    try {
+      const value = await run();
+      assert.deepEqual(constructed, []);
+      assert.deepEqual(executed, []);
+      return value;
+    } finally {
+      globalThis.RegExp = RealRegExp;
+      RealRegExp.prototype.test = realTest;
+      RealRegExp.prototype.exec = realExec;
+    }
+  }
+
   function nest(levels, leaf) {
     let node = leaf;
     for (let i = 0; i < levels; i += 1) {
@@ -1463,7 +1500,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
-  it("does not execute patternProperties regular expressions", { timeout: 500 }, async () => {
+  it("does not execute patternProperties regular expressions", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
     const warnings = [];
@@ -1471,13 +1508,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     console.warn = (...args) => {
       warnings.push(args.map(String).join(" "));
     };
-    const RealRegExp = globalThis.RegExp;
-    const constructed = [];
-    function SpyRegExp(...args) {
-      constructed.push(args[0]);
-      return new RealRegExp(...args);
-    }
-    SpyRegExp.prototype = RealRegExp.prototype;
+    const key = "a".repeat(27) + "!";
     try {
       await api.registerTool(
         {
@@ -1495,32 +1526,27 @@ describe("InsightUiWebmcp registerTool contract", () => {
         { validateOutput: true },
       );
       const tool = ctx.registerCalls[0].tool;
-      const key = "a".repeat(27);
-      globalThis.RegExp = SpyRegExp;
-      const started = Date.now();
-      assert.deepEqual(await tool.execute({ value: { id: "ok", [key]: "x" } }), {
-        id: "ok",
-        [key]: "x",
-      });
-      assert.ok(Date.now() - started < 200);
-      assert.deepEqual(constructed, []);
-      assert.equal(warnings.length, 0);
-
-      assert.deepEqual(await tool.execute({ value: { id: 1, [key]: "x" } }), {
-        id: 1,
-        [key]: "x",
+      await withoutRegExp(async () => {
+        assert.deepEqual(await tool.execute({ value: { id: "ok", [key]: "x" } }), {
+          id: "ok",
+          [key]: "x",
+        });
+        assert.equal(warnings.length, 0);
+        assert.deepEqual(await tool.execute({ value: { id: 1, [key]: "x" } }), {
+          id: 1,
+          [key]: "x",
+        });
       });
       assert.equal(warnings.length, 1);
       assert.match(warnings[0], /\$\.id expected string/);
       assert.equal(warnings[0].includes(key), false);
       assert.equal(warnings[0].includes("additionalProperties"), false);
     } finally {
-      globalThis.RegExp = RealRegExp;
       console.warn = previous;
     }
   });
 
-  it("does not evaluate a string pattern", { timeout: 500 }, async () => {
+  it("does not evaluate a string pattern", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);
     const warnings = [];
@@ -1528,6 +1554,7 @@ describe("InsightUiWebmcp registerTool contract", () => {
     console.warn = (...args) => {
       warnings.push(args.map(String).join(" "));
     };
+    const probe = "a".repeat(27) + "!";
     try {
       await api.registerTool(
         {
@@ -1535,17 +1562,14 @@ describe("InsightUiWebmcp registerTool contract", () => {
           description: "Text",
           inputSchema: { type: "object", properties: {} },
           outputSchema: { type: "string", pattern: "^(a+)+$" },
-          execute: async () => "a".repeat(28) + "!",
+          execute: async () => probe,
         },
         { validateOutput: true },
       );
-      const started = Date.now();
-      assert.equal(
-        await ctx.registerCalls[0].tool.execute({}),
-        "a".repeat(28) + "!",
-      );
-      assert.ok(Date.now() - started < 200);
-      assert.equal(warnings.length, 0);
+      await withoutRegExp(async () => {
+        assert.equal(await ctx.registerCalls[0].tool.execute({}), probe);
+        assert.equal(warnings.length, 0);
+      });
     } finally {
       console.warn = previous;
     }
