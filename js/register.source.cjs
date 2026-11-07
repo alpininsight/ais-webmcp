@@ -483,6 +483,13 @@
   /**
    * True when registerTool rejected outputSchema as a dictionary member
    * this browser does not implement. Invalid-schema failures stay visible.
+   *
+   * Chromium main declares `object outputSchema` and does not throw when the
+   * member is unknown: WebIDL drops it. The TypeError in model_context.cc is
+   * "invalid output schema: toJSON() returns undefined" (or a rethrown
+   * JSON.stringify exception). That text does not contain "outputSchema", so
+   * it is not retried. No Chromium source or test was found for an
+   * unsupported-member message, so the patterns below are unverified.
    */
   function outputSchemaMemberRejected(err) {
     var message = err && err.message != null ? String(err.message) : "";

@@ -1218,6 +1218,54 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal("outputSchema" in ctx.registerCalls[1].tool, false);
   });
 
+  it("surfaces the retry error when registration without outputSchema also fails", async () => {
+    const ctx = makeMockContext({
+      onRegister(tool) {
+        if (Object.prototype.hasOwnProperty.call(tool, "outputSchema")) {
+          throw new TypeError("Unexpected property outputSchema");
+        }
+        throw new Error("retry registration failed");
+      },
+    });
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "string" },
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, false);
+    assert.equal(ctx.registerCalls.length, 2);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema.type, "string");
+    assert.equal("outputSchema" in ctx.registerCalls[1].tool, false);
+    assert.equal(result.error, "retry registration failed");
+  });
+
+  it("does not retry Chrome's invalid output schema TypeError", async () => {
+    const ctx = makeMockContext({
+      onRegister() {
+        return Promise.reject(
+          new TypeError("invalid output schema: toJSON() returns undefined"),
+        );
+      },
+    });
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "object" },
+      execute: async () => ({}),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(ctx.registerCalls.length, 1);
+    assert.equal(
+      result.error,
+      "invalid output schema: toJSON() returns undefined",
+    );
+  });
+
   it("does not drop outputSchema when registration fails for another reason", async () => {
     const ctx = makeMockContext({
       onRegister() {
