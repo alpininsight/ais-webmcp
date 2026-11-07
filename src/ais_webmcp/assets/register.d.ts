@@ -18,14 +18,14 @@ declare const InsightUiWebmcp: {
   ): () => void;
   registerTool(
     spec: InsightUiWebmcp.WebmcpToolSpec,
-    options?: { signal?: AbortSignal },
+    options?: InsightUiWebmcp.WebmcpRegisterOptions,
   ): Promise<InsightUiWebmcp.WebmcpToolResult>;
   registerFromManifest<
     Handlers extends InsightUiWebmcp.WebmcpHandlerMap<Handlers>,
   >(
     manifest: InsightUiWebmcp.WebmcpManifest,
     handlers?: Handlers,
-    options?: { signal?: AbortSignal },
+    options?: InsightUiWebmcp.WebmcpRegisterOptions,
   ): Promise<InsightUiWebmcp.WebmcpManifestRegistration>;
   registerDefaults(): Promise<number>;
   unregister(name: string): boolean;
@@ -154,6 +154,19 @@ declare namespace InsightUiWebmcp {
     $schema?: string;
     anchors?: readonly string[];
     notes?: readonly string[];
+  }
+
+  /**
+   * `validateOutput` is a development check. When true, a tool result that
+   * misses `outputSchema` logs a warning. The result is still returned.
+   * Off by default. The check is not a full JSON Schema validator: `$ref`
+   * and combinators are not evaluated. Chrome 159 and later receive
+   * `outputSchema` unchanged; a browser that rejects the member is retried
+   * without it.
+   */
+  interface WebmcpRegisterOptions {
+    signal?: AbortSignal;
+    validateOutput?: boolean;
   }
 
   interface WebmcpToolResult {

@@ -33,7 +33,8 @@ _YAML_HEADER = """\
 # Check it with `ais-webmcp validate`. List tools with `ais-webmcp list`.
 # subscribe_newsletter is consequential and enabled: false. Do not opt in here.
 # Declare outputSchema (or output_schema) on each tool. Omission stays valid
-# and is a low-severity missing_output_schema finding.
+# and is a low-severity missing_output_schema finding. A value that is not a
+# JSON object, or not a Draft 2020-12 schema, is an error.
 # No Origin Trial token is included. Unregister is AbortController / { signal }
 # on registerTool, not unregisterTool.
 """

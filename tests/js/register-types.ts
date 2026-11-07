@@ -61,7 +61,7 @@ const idOnly: IdOnlyTool = {
 
 async function useRuntime(): Promise<void> {
   await api.registerTool(search);
-  await api.registerTool(idOnly);
+  await api.registerTool(idOnly, { validateOutput: true });
   await api.registerTool({
     id: "a_tool",
     description: "Search by id",

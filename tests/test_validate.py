@@ -424,6 +424,37 @@ def test_output_schema_present_missing_and_invalid() -> None:
 
 
 @pytest.mark.unit
+def test_structurally_invalid_output_schema_is_an_error() -> None:
+    """Missing stays a low finding. A non-object or a non-schema object fails."""
+    for value in (None, True, False, "text", 1, ["not", "an", "object"]):
+        data = _one_tool()
+        data["tools"][0]["outputSchema"] = value
+        result = validate_data(data)
+        assert result.ok is False, value
+        assert result.findings == ()
+        assert any(
+            issue.path == "tools[0].outputSchema" and "must be a JSON object" in issue.message
+            for issue in result.issues
+        ), value
+
+    broken = _one_tool()
+    broken["tools"][0]["outputSchema"] = {"type": "not-a-json-type"}
+    broken_result = validate_data(broken)
+    assert broken_result.ok is False
+    assert broken_result.findings == ()
+    assert any(
+        issue.path == "tools[0].outputSchema"
+        and "invalid Draft 2020-12 output schema" in issue.message
+        for issue in broken_result.issues
+    )
+
+    missing = validate_data(_one_tool())
+    assert missing.ok is True
+    assert [item.code for item in missing.findings] == [MISSING_OUTPUT_SCHEMA_CODE]
+    assert [item.severity for item in missing.findings] == ["low"]
+
+
+@pytest.mark.unit
 def test_missing_output_schema_stays_exit_zero(tmp_path: Path) -> None:
     path = tmp_path / "missing-output.json"
     path.write_text(json.dumps(_one_tool()), encoding="utf-8")

@@ -360,8 +360,13 @@ def _output_schema_checks(
 ) -> tuple[list[ValidationIssue], list[ValidationFinding]]:
     """Check an optional tool output schema.
 
-    A present schema must be a JSON object and a valid Draft 2020-12 schema.
-    A missing schema does not fail the tool; it returns one low finding.
+    A missing schema does not fail the tool; it returns one low finding
+    ``missing_output_schema``. A structurally invalid schema is an error
+    and adds no finding: the value is not a JSON object (including a
+    boolean JSON Schema, which ``registerTool`` cannot accept), both
+    ``outputSchema`` and ``output_schema`` are set, or the object is not
+    a valid Draft 2020-12 schema. An empty object is a valid unconstrained
+    schema, not a missing one.
     """
     present = [key for key in OUTPUT_SCHEMA_KEYS if key in tool]
     if not present:
