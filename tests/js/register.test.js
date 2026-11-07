@@ -1133,6 +1133,820 @@ describe("InsightUiWebmcp registerTool contract", () => {
     assert.equal(ctx.registerCalls[0].tool.outputSchema.properties.ok.type, "boolean");
   });
 
+  it("passes the outputSchema object through unchanged", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const outputSchema = {
+      type: "object",
+      properties: { ok: { type: "boolean" } },
+    };
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => ({ ok: true }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(ctx.registerCalls.length, 1);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema, outputSchema);
+  });
+
+  it("retries without outputSchema when the browser rejects that member", async () => {
+    const ctx = makeMockContext({
+      onRegister(tool) {
+        if (Object.prototype.hasOwnProperty.call(tool, "outputSchema")) {
+          throw new TypeError("Unexpected property outputSchema");
+        }
+      },
+    });
+    const api = loadHelper(ctx);
+    const outputSchema = {
+      type: "object",
+      properties: { ok: { type: "boolean" } },
+    };
+    const first = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => ({ ok: true }),
+    });
+    assert.equal(first.ok, true);
+    assert.equal(ctx.registerCalls.length, 2);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema, outputSchema);
+    assert.equal("outputSchema" in ctx.registerCalls[1].tool, false);
+    assert.equal(
+      ctx.registerCalls[1].tool.execute,
+      ctx.registerCalls[0].tool.execute,
+    );
+
+    const second = await api.registerTool({
+      id: "other",
+      description: "Other",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "string" },
+      execute: async () => "ok",
+    });
+    assert.equal(second.ok, true);
+    assert.equal(ctx.registerCalls.length, 3);
+    assert.equal("outputSchema" in ctx.registerCalls[2].tool, false);
+  });
+
+  it("retries when registerTool rejects the outputSchema member", async () => {
+    const ctx = makeMockContext({
+      onRegister(tool) {
+        if (Object.prototype.hasOwnProperty.call(tool, "outputSchema")) {
+          return Promise.reject(
+            new TypeError("outputSchema is not a valid dictionary member"),
+          );
+        }
+      },
+    });
+    const api = loadHelper(ctx);
+    const outputSchema = { type: "string" };
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema,
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, true);
+    assert.equal(ctx.registerCalls.length, 2);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema, outputSchema);
+    assert.equal("outputSchema" in ctx.registerCalls[1].tool, false);
+  });
+
+  it("surfaces the retry error when registration without outputSchema also fails", async () => {
+    const ctx = makeMockContext({
+      onRegister(tool) {
+        if (Object.prototype.hasOwnProperty.call(tool, "outputSchema")) {
+          throw new TypeError("Unexpected property outputSchema");
+        }
+        throw new Error("retry registration failed");
+      },
+    });
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "string" },
+      execute: async () => "ok",
+    });
+    assert.equal(result.ok, false);
+    assert.equal(ctx.registerCalls.length, 2);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema.type, "string");
+    assert.equal("outputSchema" in ctx.registerCalls[1].tool, false);
+    assert.equal(result.error, "retry registration failed");
+  });
+
+  it("does not retry Chrome's invalid output schema TypeError", async () => {
+    const ctx = makeMockContext({
+      onRegister() {
+        return Promise.reject(
+          new TypeError("invalid output schema: toJSON() returns undefined"),
+        );
+      },
+    });
+    const api = loadHelper(ctx);
+    const result = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "object" },
+      execute: async () => ({}),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(ctx.registerCalls.length, 1);
+    assert.equal(
+      result.error,
+      "invalid output schema: toJSON() returns undefined",
+    );
+  });
+
+  it("does not drop outputSchema when registration fails for another reason", async () => {
+    const ctx = makeMockContext({
+      onRegister() {
+        return Promise.reject(new TypeError("outputSchema is not valid JSON"));
+      },
+    });
+    const api = loadHelper(ctx);
+    const invalid = await api.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "object" },
+      execute: async () => ({}),
+    });
+    assert.equal(invalid.ok, false);
+    assert.match(invalid.error, /valid JSON/);
+    assert.equal(ctx.registerCalls.length, 1);
+    assert.equal(ctx.registerCalls[0].tool.outputSchema.type, "object");
+
+    const other = makeMockContext({
+      onRegister() {
+        throw new Error("duplicate tool");
+      },
+    });
+    const api2 = loadHelper(other);
+    const failed = await api2.registerTool({
+      id: "probe",
+      description: "Probe",
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "string" },
+      execute: async () => "ok",
+    });
+    assert.equal(failed.ok, false);
+    assert.match(failed.error, /duplicate tool/);
+    assert.equal(other.registerCalls.length, 1);
+    assert.equal(other.registerCalls[0].tool.outputSchema.type, "string");
+  });
+
+  it("warns for an outputSchema mismatch only when validateOutput is set", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const outputSchema = {
+      type: "object",
+      required: ["ok"],
+      additionalProperties: false,
+      properties: {
+        ok: { type: "boolean" },
+        items: { type: "array", items: { type: "string" } },
+      },
+    };
+    try {
+      await api.registerTool({
+        id: "probe",
+        description: "Probe",
+        inputSchema: { type: "object", properties: {} },
+        outputSchema,
+        execute: async () => ({ extra: true, items: [1] }),
+      });
+      const silent = ctx.registerCalls[0].tool;
+      const quiet = await silent.execute({});
+      assert.deepEqual(quiet, { extra: true, items: [1] });
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "probe",
+          description: "Probe",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema,
+          execute: async () => ({ extra: true, items: [1] }),
+        },
+        { validateOutput: true },
+      );
+      const checked = ctx.registerCalls[1].tool;
+      const secret = "do-not-log-this-result";
+      const noisy = await checked.execute({});
+      assert.deepEqual(noisy, { extra: true, items: [1] });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /probe/);
+      assert.match(warnings[0], /outputSchema/);
+      assert.match(warnings[0], /returned anyway/);
+      assert.equal(warnings[0].includes(secret), false);
+      assert.equal(warnings[0].includes("extra"), false);
+      await checked.execute({});
+      assert.equal(warnings.length, 1);
+
+      const match = await api.registerTool(
+        {
+          id: "exact",
+          description: "Exact",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema,
+          execute: async () => ({ ok: true, items: ["a"] }),
+        },
+        { validateOutput: true },
+      );
+      assert.equal(match.ok, true);
+      assert.deepEqual(await ctx.registerCalls[2].tool.execute({}), {
+        ok: true,
+        items: ["a"],
+      });
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("validateOutput covers type, enum, and $ref limits without rejecting", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "count",
+          description: "Count",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "integer", enum: [1, 2] },
+          execute: async (input) => input.mode,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      assert.equal(await tool.execute({ mode: 1.5 }), 1.5);
+      assert.match(warnings[0], /expected integer/);
+      assert.match(warnings[0], /not in enum/);
+      assert.equal(warnings[0].includes("1.5"), false);
+      warnings.length = 0;
+      assert.equal(await tool.execute({ mode: 2 }), 2);
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "ref_only",
+          description: "Ref",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { $ref: "#/$defs/out" },
+          execute: async () => "not-checked",
+        },
+        { validateOutput: true },
+      );
+      assert.equal(await ctx.registerCalls[1].tool.execute({}), "not-checked");
+      assert.equal(warnings.length, 0);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  /**
+   * Fail the output check if it builds or runs a regular expression.
+   * Construction and exec/test throw instead of calling the real RegExp,
+   * so a schema pattern cannot block the test thread.
+   */
+  async function withoutRegExp(run) {
+    const RealRegExp = globalThis.RegExp;
+    const realTest = RealRegExp.prototype.test;
+    const realExec = RealRegExp.prototype.exec;
+    const constructed = [];
+    const executed = [];
+    function SpyRegExp() {
+      constructed.push(arguments.length ? String(arguments[0]) : "");
+      throw new Error("RegExp constructed during output check");
+    }
+    SpyRegExp.prototype = RealRegExp.prototype;
+    globalThis.RegExp = SpyRegExp;
+    RealRegExp.prototype.test = function () {
+      executed.push("test");
+      throw new Error("RegExp.test during output check");
+    };
+    RealRegExp.prototype.exec = function () {
+      executed.push("exec");
+      throw new Error("RegExp.exec during output check");
+    };
+    try {
+      const value = await run();
+      assert.deepEqual(constructed, []);
+      assert.deepEqual(executed, []);
+      return value;
+    } finally {
+      globalThis.RegExp = RealRegExp;
+      RealRegExp.prototype.test = realTest;
+      RealRegExp.prototype.exec = realExec;
+    }
+  }
+
+  function nest(levels, leaf) {
+    let node = leaf;
+    for (let i = 0; i < levels; i += 1) {
+      node = { n: node };
+    }
+    return node;
+  }
+
+  it("warns for additionalProperties false when properties is omitted", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "closed",
+          description: "Closed",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "object", additionalProperties: false },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      assert.deepEqual(await tool.execute({ value: {} }), {});
+      assert.equal(warnings.length, 0);
+      const extra = { extra: 1 };
+      assert.deepEqual(await tool.execute({ value: extra }), extra);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /additionalProperties does not allow/);
+      assert.equal(warnings[0].includes("extra"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not execute patternProperties regular expressions", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const key = "a".repeat(27) + "!";
+    try {
+      await api.registerTool(
+        {
+          id: "labels",
+          description: "Labels",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { id: { type: "string" } },
+            patternProperties: { "^(a+)+$": { type: "number" } },
+          },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      await withoutRegExp(async () => {
+        assert.deepEqual(await tool.execute({ value: { id: "ok", [key]: "x" } }), {
+          id: "ok",
+          [key]: "x",
+        });
+        assert.equal(warnings.length, 0);
+        assert.deepEqual(await tool.execute({ value: { id: 1, [key]: "x" } }), {
+          id: 1,
+          [key]: "x",
+        });
+      });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\.id expected string/);
+      assert.equal(warnings[0].includes(key), false);
+      assert.equal(warnings[0].includes("additionalProperties"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not evaluate a string pattern", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const probe = "a".repeat(27) + "!";
+    try {
+      await api.registerTool(
+        {
+          id: "text",
+          description: "Text",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "string", pattern: "^(a+)+$" },
+          execute: async () => probe,
+        },
+        { validateOutput: true },
+      );
+      await withoutRegExp(async () => {
+        assert.equal(await ctx.registerCalls[0].tool.execute({}), probe);
+        assert.equal(warnings.length, 0);
+      });
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not include result keys in validateOutput warnings", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const secret = "user@example.com";
+    try {
+      await api.registerTool(
+        {
+          id: "record",
+          description: "Record",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              tags: { type: "array", items: { type: "string" } },
+            },
+          },
+          execute: async () => ({
+            name: 1,
+            tags: [1],
+            [secret]: "hidden",
+          }),
+        },
+        { validateOutput: true },
+      );
+      assert.equal(typeof (await ctx.registerCalls[0].tool.execute({})).name, "number");
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\.name expected string/);
+      assert.match(warnings[0], /\$\.tags\[0\] expected string/);
+      assert.match(warnings[0], /additionalProperties does not allow/);
+      assert.equal(warnings[0].includes(secret), false);
+      assert.equal(warnings[0].includes("hidden"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("skips boolean subschemas, items false, and an empty prefixItems", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "bool_schema",
+          description: "Boolean subschema",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { a: true },
+          },
+          execute: async () => ({ a: 1 }),
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), { a: 1 });
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "items_false",
+          description: "Items false",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [{ type: "string" }],
+            items: false,
+          },
+          execute: async () => ["ok", "extra"],
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), [
+        "ok",
+        "extra",
+      ]);
+      assert.equal(warnings.length, 0);
+
+      const emptyPrefix = await api.registerTool(
+        {
+          id: "empty_prefix",
+          description: "Empty prefix",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [],
+            items: { type: "string" },
+          },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      // Draft 2020-12 schemaArray requires minItems 1, so an empty
+      // prefixItems never reaches the result check.
+      assert.equal(emptyPrefix.ok, false);
+      assert.match(emptyPrefix.error, /output schema/i);
+      assert.equal(ctx.registerCalls.length, 2);
+      assert.equal(warnings.length, 0);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("checks prefixItems before items and does not warn on a valid tuple", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const outputSchema = {
+      type: "array",
+      prefixItems: [{ type: "string" }, { type: "number" }],
+      items: { type: "boolean" },
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "tuple",
+          description: "Tuple",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema,
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const valid = ["a", 1, true];
+      assert.deepEqual(await tool.execute({ rows: valid }), valid);
+      assert.equal(warnings.length, 0);
+      assert.deepEqual(await tool.execute({ rows: ["a"] }), ["a"]);
+      assert.equal(warnings.length, 0);
+
+      const prefixMismatch = [1, 1, true];
+      assert.deepEqual(
+        await tool.execute({ rows: prefixMismatch }),
+        prefixMismatch,
+      );
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[0\] expected string/);
+      assert.equal(warnings[0].includes("$[1]"), false);
+      assert.equal(warnings[0].includes("$[2]"), false);
+
+      warnings.length = 0;
+      const itemMismatch = ["a", 1, "no"];
+      assert.deepEqual(await tool.execute({ rows: itemMismatch }), itemMismatch);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[2\] expected boolean/);
+      assert.equal(warnings[0].includes("$[0]"), false);
+
+      warnings.length = 0;
+      await api.registerTool(
+        {
+          id: "prefix_only",
+          description: "Prefix only",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [{ type: "string" }, { type: "number" }],
+          },
+          execute: async () => ["a", 1, "free"],
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), [
+        "a",
+        1,
+        "free",
+      ]);
+      assert.equal(warnings.length, 0);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("checks items past the twentieth array element", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "rows",
+          description: "Rows",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "array", items: { type: "string" } },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const good = Array.from({ length: 25 }, () => "ok");
+      assert.deepEqual(await tool.execute({ rows: good }), good);
+      assert.equal(warnings.length, 0);
+      const bad = good.slice();
+      bad[20] = 1;
+      assert.deepEqual(await tool.execute({ rows: bad }), bad);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[20\] expected string/);
+      assert.equal(warnings[0].includes("1"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("lists at most three paths when more items mismatch", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "rows",
+          description: "Rows",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "array", items: { type: "string" } },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const rows = [0, 1, 2, 3, 4];
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({ rows }), rows);
+      assert.equal(warnings.length, 1);
+      const listed = warnings[0].match(/\$\[\d+\] expected string/g) || [];
+      assert.deepEqual(listed, [
+        "$[0] expected string",
+        "$[1] expected string",
+        "$[2] expected string",
+      ]);
+      assert.equal(warnings[0].includes("$[3]"), false);
+      assert.equal(warnings[0].includes("$[4]"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("does not warn when a deep const or enum value is equal", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const deep = nest(9, { v: 1 });
+    const same = nest(9, { v: 1 });
+    try {
+      await api.registerTool(
+        {
+          id: "deep_const",
+          description: "Deep const",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { const: deep },
+          execute: async () => same,
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), same);
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "deep_enum",
+          description: "Deep enum",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { enum: [nest(9, { v: 1 })] },
+          execute: async () => nest(9, { v: 1 }),
+        },
+        { validateOutput: true },
+      );
+      await ctx.registerCalls[1].tool.execute({});
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "shallow",
+          description: "Shallow",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { const: { n: 1 }, enum: [{ n: 1 }] },
+          execute: async () => ({ n: 2 }),
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[2].tool.execute({}), { n: 2 });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /does not match const/);
+      assert.match(warnings[0], /not in enum/);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("a throwing console.warn does not reject the tool result", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const previous = console.warn;
+    console.warn = () => {
+      throw new Error("warn failed");
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "probe",
+          description: "Probe",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "string" },
+          execute: async () => 1,
+        },
+        { validateOutput: true },
+      );
+      assert.equal(await ctx.registerCalls[0].tool.execute({}), 1);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("registerFromManifest forwards validateOutput", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      const summary = await api.registerFromManifest(
+        {
+          profile: "webpage",
+          version: "1",
+          tools: [
+            {
+              id: "probe",
+              name: "Probe",
+              description: "Contract probe",
+              inputSchema: { type: "object", properties: {} },
+              outputSchema: { type: ["string", "null"] },
+            },
+          ],
+        },
+        { probe: async () => 4 },
+        { validateOutput: true },
+      );
+      assert.equal(summary.registered, 1);
+      assert.equal(await ctx.registerCalls[0].tool.execute({}), 4);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /expected string\|null/);
+      assert.equal(warnings[0].includes("4"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
   it("rejects an invalid tool id", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

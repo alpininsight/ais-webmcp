@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- `validateOutput` does not execute schema regular expressions. String
+  `pattern` and `patternProperties` are skipped. A schema that has
+  `patternProperties` does not check `additionalProperties: false`. Warning
+  text does not include result keys. Boolean subschemas and `items: false`
+  are not evaluated.
+- `validateOutput` does not warn for a property allowed by
+  `patternProperties` or for a tuple position covered by `prefixItems`.
+  `items` applies only after the prefix. Keywords the check does not
+  understand are skipped.
+- `validateOutput` checks every array element, treats
+  `additionalProperties: false` without `properties` as an empty allow-list,
+  and does not warn when a `const` or `enum` comparison passes its nesting
+  cap.
+- Pass `outputSchema` through to `document.modelContext.registerTool()`
+  unchanged. Chrome 159 and later accept it. If the browser rejects the
+  member as unsupported, registration is retried once without it. Optional
+  `validateOutput: true` warns when a result misses the schema and still
+  returns the result. The check is off by default and is not full JSON Schema
+  validation. Mismatch behavior remains open in webmachinelearning/webmcp#92.
+- A schema that is not a JSON object, or not a valid Draft 2020-12 schema,
+  is an error. A missing `outputSchema` stays a low finding.
 - Publish PyPI project URLs for this repository, its issue tracker, and
   `CHANGELOG.md` on the `develop` branch. The Apache-2.0 license stays a
   PEP 639 `License-Expression`, and the OSI Apache license classifier is set.
@@ -15,7 +36,8 @@
   A tool that omits `readOnlyHint` adds a low `hints_not_safety_assurances`
   finding: missing `readOnlyHint`, `destructiveHint`, and `openWorldHint`
   must not be treated as safe. Side effects stay on `consequentialHint`.
-  `registerTool`, `getTools`, and `executeTool` are unchanged.
+  Hint defaults on `registerTool` are unchanged. `getTools` and `executeTool`
+  are unchanged.
 
 ## 0.1.2 (2026-11-02)
 
