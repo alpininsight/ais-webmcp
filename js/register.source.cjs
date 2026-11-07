@@ -47,7 +47,6 @@
   var outputSchemaAccepted = null;
   /** @type {Set<string>} */
   var warnedOutputMismatches = new Set();
-  var warnedUncheckedPattern = false;
 
   // Tool names: 1..128 chars of [A-Za-z0-9_.-] (WebMCP draft).
   var TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -352,30 +351,15 @@
    * Boolean subschemas, including `items: false`, are ignored. `const` and
    * `enum` compare at most 8 nested object or array levels; past that the
    * comparison is skipped and does not warn. `items` applies after
-   * `prefixItems`. A key that matches `patternProperties` is not an
-   * unexpected property. Those name patterns use Unicode regular
-   * expressions. String `pattern` is not evaluated: matching it against a
-   * result can block the page. A property-name pattern that does not
-   * compile is skipped and warned once; that is not a mismatch. The warning
-   * keeps at most three
-   * paths. Messages name schema paths only, never the result value.
-   * Unsupported keywords are skipped, not warned.
+   * `prefixItems`. String `pattern` and `patternProperties` are not
+   * evaluated: a schema regular expression can block the page. When
+   * `patternProperties` is present, keys outside `properties` are treated
+   * as possibly allowed, so `additionalProperties: false` is not checked
+   * for that object and pattern subschemas are not applied. The warning
+   * keeps at most three paths. Messages use schema paths and array indexes
+   * only, never a value or a key taken from the result. Unsupported
+   * keywords are skipped, not warned.
    */
-  function noteUncheckedPattern() {
-    if (warnedUncheckedPattern) {
-      return;
-    }
-    warnedUncheckedPattern = true;
-    try {
-      if (global.console && typeof global.console.warn === "function") {
-        global.console.warn(
-          "InsightUiWebmcp: outputSchema pattern was not checked because it is not a valid Unicode regular expression",
-        );
-      }
-    } catch (_err) {
-      /* advisory only */
-    }
-  }
   function schemaMap(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return null;
@@ -383,41 +367,6 @@
     return value;
   }
 
-  function compilePattern(pattern) {
-    if (typeof pattern !== "string") {
-      return null;
-    }
-    try {
-      // JSON Schema patterns match Unicode code points, not UTF-16 units.
-      return new RegExp(pattern, "u");
-    } catch (_err) {
-      return null;
-    }
-  }
-
-  /**
-   * True when `key` matches a patternProperties pattern. An unusable pattern
-   * counts as a match so additionalProperties does not warn for a key the
-   * checker cannot classify.
-   */
-  function matchesPatternProperties(patternProperties, key) {
-    var patterns = schemaMap(patternProperties);
-    if (!patterns) {
-      return false;
-    }
-    var names = Object.keys(patterns);
-    for (var i = 0; i < names.length; i++) {
-      var re = compilePattern(names[i]);
-      if (!re) {
-        noteUncheckedPattern();
-        return true;
-      }
-      if (re.test(key)) {
-        return true;
-      }
-    }
-    return false;
-  }
   function collectOutputMismatches(schema, value, path, depth, seen, mismatches) {
     if (mismatches.length >= 3 || depth > 8) {
       return;
@@ -482,14 +431,20 @@
         }
       }
     }
-    if (isObject && schema.additionalProperties === false) {
+    // patternProperties would require executing a schema regex against each
+    // result key. Skip additionalProperties instead of guessing.
+    if (
+      isObject &&
+      schema.additionalProperties === false &&
+      !schemaMap(schema.patternProperties)
+    ) {
       var allowed = schemaMap(schema.properties);
       var valueKeys = Object.keys(value);
       for (var a = 0; a < valueKeys.length; a++) {
-        var key = valueKeys[a];
         var named =
-          allowed && Object.prototype.hasOwnProperty.call(allowed, key);
-        if (!named && !matchesPatternProperties(schema.patternProperties, key)) {
+          allowed &&
+          Object.prototype.hasOwnProperty.call(allowed, valueKeys[a]);
+        if (!named) {
           mismatches.push(
             path + " has a property that additionalProperties does not allow",
           );
@@ -505,34 +460,6 @@
             schema.properties[propNames[p]],
             value[propNames[p]],
             path + "." + propNames[p],
-            depth + 1,
-            seen,
-            mismatches,
-          );
-        }
-      }
-    }
-    if (isObject && schemaMap(schema.patternProperties)) {
-      var patternNames = Object.keys(schema.patternProperties);
-      var present = Object.keys(value);
-      for (var pi = 0; pi < patternNames.length && mismatches.length < 3; pi++) {
-        var re = compilePattern(patternNames[pi]);
-        var subschema = schema.patternProperties[patternNames[pi]];
-        if (!re) {
-          noteUncheckedPattern();
-          continue;
-        }
-        if (!subschema || typeof subschema !== "object" || Array.isArray(subschema)) {
-          continue;
-        }
-        for (var pk = 0; pk < present.length && mismatches.length < 3; pk++) {
-          if (!re.test(present[pk])) {
-            continue;
-          }
-          collectOutputMismatches(
-            subschema,
-            value[present[pk]],
-            path + "." + present[pk],
             depth + 1,
             seen,
             mismatches,

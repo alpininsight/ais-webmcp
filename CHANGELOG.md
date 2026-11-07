@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- `validateOutput` does not evaluate string `pattern`. `patternProperties`
-  names still use a Unicode regular expression. A property-name pattern that
-  does not compile is skipped, not reported as a mismatch. Boolean
-  subschemas and `items: false` are not evaluated.
+- `validateOutput` does not execute schema regular expressions. String
+  `pattern` and `patternProperties` are skipped. A schema that has
+  `patternProperties` does not check `additionalProperties: false`. Warning
+  text does not include result keys. Boolean subschemas and `items: false`
+  are not evaluated.
 - `validateOutput` does not warn for a property allowed by
   `patternProperties` or for a tuple position covered by `prefixItems`.
   `items` applies only after the prefix. Keywords the check does not
