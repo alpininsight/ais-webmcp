@@ -1508,6 +1508,220 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
+  it("matches pattern and patternProperties by Unicode code point", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "glyph",
+          description: "Glyph",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            patternProperties: { "^.$": { type: "string" } },
+          },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const emoji = { "😀": "ok" };
+      assert.deepEqual(await tool.execute({ value: emoji }), emoji);
+      assert.equal(warnings.length, 0);
+      const two = { ab: "ok" };
+      assert.deepEqual(await tool.execute({ value: two }), two);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /additionalProperties does not allow/);
+
+      warnings.length = 0;
+      await api.registerTool(
+        {
+          id: "one_char",
+          description: "One character",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "string", pattern: "^.$" },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const text = ctx.registerCalls[1].tool;
+      assert.equal(await text.execute({ value: "😀" }), "😀");
+      assert.equal(warnings.length, 0);
+      assert.equal(await text.execute({ value: "ab" }), "ab");
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /does not match pattern/);
+      assert.equal(warnings[0].includes("ab"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("skips an invalid pattern instead of warning a mismatch", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "broken",
+          description: "Broken pattern",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: { type: "string", pattern: "(" },
+          execute: async () => "ok",
+        },
+        { validateOutput: true },
+      );
+      assert.equal(await ctx.registerCalls[0].tool.execute({}), "ok");
+      assert.equal(await ctx.registerCalls[0].tool.execute({}), "ok");
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /not checked/);
+      assert.equal(warnings[0].includes("does not match"), false);
+
+      await api.registerTool(
+        {
+          id: "broken_keys",
+          description: "Broken key pattern",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            patternProperties: { "(": { type: "string" } },
+          },
+          execute: async () => ({ a: "ok" }),
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), { a: "ok" });
+      assert.equal(warnings.length, 1);
+      assert.equal(warnings[0].includes("additionalProperties"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("applies every matching patternProperties schema and named properties", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "overlap",
+          description: "Overlap",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { name: { type: "string" } },
+            patternProperties: {
+              "^n": { type: "string" },
+              "e$": { type: "string" },
+            },
+          },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      assert.deepEqual(await tool.execute({ value: { name: "ok" } }), {
+        name: "ok",
+      });
+      assert.equal(warnings.length, 0);
+      assert.deepEqual(await tool.execute({ value: { name: 1 } }), { name: 1 });
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /expected string/);
+      assert.equal(warnings[0].includes("additionalProperties"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("skips boolean subschemas, items false, and an empty prefixItems", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "bool_schema",
+          description: "Boolean subschema",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { a: true },
+          },
+          execute: async () => ({ a: 1 }),
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[0].tool.execute({}), { a: 1 });
+      assert.equal(warnings.length, 0);
+
+      await api.registerTool(
+        {
+          id: "items_false",
+          description: "Items false",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [{ type: "string" }],
+            items: false,
+          },
+          execute: async () => ["ok", "extra"],
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), [
+        "ok",
+        "extra",
+      ]);
+      assert.equal(warnings.length, 0);
+
+      const emptyPrefix = await api.registerTool(
+        {
+          id: "empty_prefix",
+          description: "Empty prefix",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [],
+            items: { type: "string" },
+          },
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      // Draft 2020-12 schemaArray requires minItems 1, so an empty
+      // prefixItems never reaches the result check.
+      assert.equal(emptyPrefix.ok, false);
+      assert.match(emptyPrefix.error, /output schema/i);
+      assert.equal(ctx.registerCalls.length, 2);
+      assert.equal(warnings.length, 0);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
   it("checks prefixItems before items and does not warn on a valid tuple", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

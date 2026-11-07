@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `validateOutput` matches `pattern` and `patternProperties` with Unicode
+  regular expressions. A pattern that does not compile is skipped, not
+  reported as a mismatch. Boolean subschemas and `items: false` are not
+  evaluated.
 - `validateOutput` does not warn for a property allowed by
   `patternProperties` or for a tuple position covered by `prefixItems`.
   `items` applies only after the prefix. Keywords the check does not

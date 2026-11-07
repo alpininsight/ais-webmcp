@@ -47,6 +47,7 @@
   var outputSchemaAccepted = null;
   /** @type {Set<string>} */
   var warnedOutputMismatches = new Set();
+  var warnedUncheckedPattern = false;
 
   // Tool names: 1..128 chars of [A-Za-z0-9_.-] (WebMCP draft).
   var TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -347,14 +348,32 @@
 
   /**
    * Lightweight outputSchema check. Not Draft 2020-12 instance validation:
-   * `$ref`, combinators, pattern, format, ranges, and string length are
-   * ignored. Boolean subschemas are ignored. `const` and `enum` compare at
-   * most 8 nested object or array levels; past that the comparison is
-   * skipped and does not warn. `items` applies after `prefixItems`. A key
-   * that matches `patternProperties` is not an unexpected property. The
-   * warning keeps at most three paths. Messages name schema paths only,
-   * never the result value. Unsupported keywords are skipped, not warned.
+   * `$ref`, combinators, format, ranges, and string length are ignored.
+   * Boolean subschemas, including `items: false`, are ignored. `const` and
+   * `enum` compare at most 8 nested object or array levels; past that the
+   * comparison is skipped and does not warn. `items` applies after
+   * `prefixItems`. A key that matches `patternProperties` is not an
+   * unexpected property. `pattern` and `patternProperties` use Unicode
+   * regular expressions. A pattern that does not compile is skipped and
+   * warned once; that is not a mismatch. The warning keeps at most three
+   * paths. Messages name schema paths only, never the result value.
+   * Unsupported keywords are skipped, not warned.
    */
+  function noteUncheckedPattern() {
+    if (warnedUncheckedPattern) {
+      return;
+    }
+    warnedUncheckedPattern = true;
+    try {
+      if (global.console && typeof global.console.warn === "function") {
+        global.console.warn(
+          "InsightUiWebmcp: outputSchema pattern was not checked because it is not a valid Unicode regular expression",
+        );
+      }
+    } catch (_err) {
+      /* advisory only */
+    }
+  }
   function schemaMap(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return null;
@@ -363,8 +382,12 @@
   }
 
   function compilePattern(pattern) {
+    if (typeof pattern !== "string") {
+      return null;
+    }
     try {
-      return new RegExp(pattern);
+      // JSON Schema patterns match Unicode code points, not UTF-16 units.
+      return new RegExp(pattern, "u");
     } catch (_err) {
       return null;
     }
@@ -383,7 +406,11 @@
     var names = Object.keys(patterns);
     for (var i = 0; i < names.length; i++) {
       var re = compilePattern(names[i]);
-      if (!re || re.test(key)) {
+      if (!re) {
+        noteUncheckedPattern();
+        return true;
+      }
+      if (re.test(key)) {
         return true;
       }
     }
@@ -428,6 +455,15 @@
     if (typeof types === "string") {
       types = [types];
     }
+    if (typeof schema.pattern === "string" && typeof value === "string") {
+      var valuePattern = compilePattern(schema.pattern);
+      if (!valuePattern) {
+        noteUncheckedPattern();
+      } else if (!valuePattern.test(value)) {
+        mismatches.push(path + " does not match pattern");
+      }
+    }
+
     if (Array.isArray(types) && types.length && !valueMatchesTypes(types, value)) {
       var declared = [];
       for (var t = 0; t < types.length; t++) {
@@ -489,12 +525,11 @@
       for (var pi = 0; pi < patternNames.length && mismatches.length < 3; pi++) {
         var re = compilePattern(patternNames[pi]);
         var subschema = schema.patternProperties[patternNames[pi]];
-        if (
-          !re ||
-          !subschema ||
-          typeof subschema !== "object" ||
-          Array.isArray(subschema)
-        ) {
+        if (!re) {
+          noteUncheckedPattern();
+          continue;
+        }
+        if (!subschema || typeof subschema !== "object" || Array.isArray(subschema)) {
           continue;
         }
         for (var pk = 0; pk < present.length && mismatches.length < 3; pk++) {
@@ -513,6 +548,9 @@
       }
     }
     if (Array.isArray(value)) {
+      // An empty prefixItems array is not a valid Draft 2020-12 schema
+      // (schemaArray minItems is 1), so registration rejects it. A missing
+      // prefixItems is the valid form of "no tuple positions".
       var prefix = Array.isArray(schema.prefixItems) ? schema.prefixItems : [];
       var prefixCount = prefix.length < value.length ? prefix.length : value.length;
       for (var i = 0; i < prefixCount && mismatches.length < 3; i++) {
