@@ -1463,6 +1463,124 @@ describe("InsightUiWebmcp registerTool contract", () => {
     }
   });
 
+  it("does not warn for patternProperties that additionalProperties allows", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "labels",
+          description: "Labels",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "object",
+            additionalProperties: false,
+            patternProperties: { "^x-": { type: "string" } },
+          },
+          execute: async (input) => input.value,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const valid = { "x-a": "ok" };
+      assert.deepEqual(await tool.execute({ value: valid }), valid);
+      assert.equal(warnings.length, 0);
+
+      const wrongType = { "x-a": 1 };
+      assert.deepEqual(await tool.execute({ value: wrongType }), wrongType);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /expected string/);
+      assert.equal(warnings[0].includes("additionalProperties"), false);
+
+      warnings.length = 0;
+      const unexpected = { y: 1 };
+      assert.deepEqual(await tool.execute({ value: unexpected }), unexpected);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /additionalProperties does not allow/);
+      assert.equal(warnings[0].includes(".y"), false);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
+  it("checks prefixItems before items and does not warn on a valid tuple", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const warnings = [];
+    const previous = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const outputSchema = {
+      type: "array",
+      prefixItems: [{ type: "string" }, { type: "number" }],
+      items: { type: "boolean" },
+    };
+    try {
+      await api.registerTool(
+        {
+          id: "tuple",
+          description: "Tuple",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema,
+          execute: async (input) => input.rows,
+        },
+        { validateOutput: true },
+      );
+      const tool = ctx.registerCalls[0].tool;
+      const valid = ["a", 1, true];
+      assert.deepEqual(await tool.execute({ rows: valid }), valid);
+      assert.equal(warnings.length, 0);
+      assert.deepEqual(await tool.execute({ rows: ["a"] }), ["a"]);
+      assert.equal(warnings.length, 0);
+
+      const prefixMismatch = [1, 1, true];
+      assert.deepEqual(
+        await tool.execute({ rows: prefixMismatch }),
+        prefixMismatch,
+      );
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[0\] expected string/);
+      assert.equal(warnings[0].includes("$[1]"), false);
+      assert.equal(warnings[0].includes("$[2]"), false);
+
+      warnings.length = 0;
+      const itemMismatch = ["a", 1, "no"];
+      assert.deepEqual(await tool.execute({ rows: itemMismatch }), itemMismatch);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /\$\[2\] expected boolean/);
+      assert.equal(warnings[0].includes("$[0]"), false);
+
+      warnings.length = 0;
+      await api.registerTool(
+        {
+          id: "prefix_only",
+          description: "Prefix only",
+          inputSchema: { type: "object", properties: {} },
+          outputSchema: {
+            type: "array",
+            prefixItems: [{ type: "string" }, { type: "number" }],
+          },
+          execute: async () => ["a", 1, "free"],
+        },
+        { validateOutput: true },
+      );
+      assert.deepEqual(await ctx.registerCalls[1].tool.execute({}), [
+        "a",
+        1,
+        "free",
+      ]);
+      assert.equal(warnings.length, 0);
+    } finally {
+      console.warn = previous;
+    }
+  });
+
   it("checks items past the twentieth array element", async () => {
     const ctx = makeMockContext();
     const api = loadHelper(ctx);

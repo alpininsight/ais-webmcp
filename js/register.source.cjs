@@ -350,10 +350,45 @@
    * `$ref`, combinators, pattern, format, ranges, and string length are
    * ignored. Boolean subschemas are ignored. `const` and `enum` compare at
    * most 8 nested object or array levels; past that the comparison is
-   * skipped and does not warn. `items` is checked for every element, and
-   * the warning keeps at most three paths. Messages name schema paths only,
-   * never the result value.
+   * skipped and does not warn. `items` applies after `prefixItems`. A key
+   * that matches `patternProperties` is not an unexpected property. The
+   * warning keeps at most three paths. Messages name schema paths only,
+   * never the result value. Unsupported keywords are skipped, not warned.
    */
+  function schemaMap(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  function compilePattern(pattern) {
+    try {
+      return new RegExp(pattern);
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  /**
+   * True when `key` matches a patternProperties pattern. An unusable pattern
+   * counts as a match so additionalProperties does not warn for a key the
+   * checker cannot classify.
+   */
+  function matchesPatternProperties(patternProperties, key) {
+    var patterns = schemaMap(patternProperties);
+    if (!patterns) {
+      return false;
+    }
+    var names = Object.keys(patterns);
+    for (var i = 0; i < names.length; i++) {
+      var re = compilePattern(names[i]);
+      if (!re || re.test(key)) {
+        return true;
+      }
+    }
+    return false;
+  }
   function collectOutputMismatches(schema, value, path, depth, seen, mismatches) {
     if (mismatches.length >= 3 || depth > 8) {
       return;
@@ -419,20 +454,13 @@
       }
     }
     if (isObject && schema.additionalProperties === false) {
-      var allowed = null;
-      if (
-        schema.properties &&
-        typeof schema.properties === "object" &&
-        !Array.isArray(schema.properties)
-      ) {
-        allowed = schema.properties;
-      }
+      var allowed = schemaMap(schema.properties);
       var valueKeys = Object.keys(value);
       for (var a = 0; a < valueKeys.length; a++) {
-        if (
-          !allowed ||
-          !Object.prototype.hasOwnProperty.call(allowed, valueKeys[a])
-        ) {
+        var key = valueKeys[a];
+        var named =
+          allowed && Object.prototype.hasOwnProperty.call(allowed, key);
+        if (!named && !matchesPatternProperties(schema.patternProperties, key)) {
           mismatches.push(
             path + " has a property that additionalProperties does not allow",
           );
@@ -440,12 +468,7 @@
         }
       }
     }
-    if (
-      isObject &&
-      schema.properties &&
-      typeof schema.properties === "object" &&
-      !Array.isArray(schema.properties)
-    ) {
+    if (isObject && schemaMap(schema.properties)) {
       var propNames = Object.keys(schema.properties);
       for (var p = 0; p < propNames.length && mismatches.length < 3; p++) {
         if (Object.prototype.hasOwnProperty.call(value, propNames[p])) {
@@ -460,21 +483,63 @@
         }
       }
     }
-    if (
-      Array.isArray(value) &&
-      schema.items &&
-      typeof schema.items === "object" &&
-      !Array.isArray(schema.items)
-    ) {
-      for (var n = 0; n < value.length && mismatches.length < 3; n++) {
+    if (isObject && schemaMap(schema.patternProperties)) {
+      var patternNames = Object.keys(schema.patternProperties);
+      var present = Object.keys(value);
+      for (var pi = 0; pi < patternNames.length && mismatches.length < 3; pi++) {
+        var re = compilePattern(patternNames[pi]);
+        var subschema = schema.patternProperties[patternNames[pi]];
+        if (
+          !re ||
+          !subschema ||
+          typeof subschema !== "object" ||
+          Array.isArray(subschema)
+        ) {
+          continue;
+        }
+        for (var pk = 0; pk < present.length && mismatches.length < 3; pk++) {
+          if (!re.test(present[pk])) {
+            continue;
+          }
+          collectOutputMismatches(
+            subschema,
+            value[present[pk]],
+            path + "." + present[pk],
+            depth + 1,
+            seen,
+            mismatches,
+          );
+        }
+      }
+    }
+    if (Array.isArray(value)) {
+      var prefix = Array.isArray(schema.prefixItems) ? schema.prefixItems : [];
+      var prefixCount = prefix.length < value.length ? prefix.length : value.length;
+      for (var i = 0; i < prefixCount && mismatches.length < 3; i++) {
+        var position = prefix[i];
+        if (!position || typeof position !== "object" || Array.isArray(position)) {
+          continue;
+        }
         collectOutputMismatches(
-          schema.items,
-          value[n],
-          path + "[" + n + "]",
+          position,
+          value[i],
+          path + "[" + i + "]",
           depth + 1,
           seen,
           mismatches,
         );
+      }
+      if (schema.items && typeof schema.items === "object" && !Array.isArray(schema.items)) {
+        for (var n = prefix.length; n < value.length && mismatches.length < 3; n++) {
+          collectOutputMismatches(
+            schema.items,
+            value[n],
+            path + "[" + n + "]",
+            depth + 1,
+            seen,
+            mismatches,
+          );
+        }
       }
     }
 

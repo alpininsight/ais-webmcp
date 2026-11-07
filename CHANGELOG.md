@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `validateOutput` does not warn for a property allowed by
+  `patternProperties` or for a tuple position covered by `prefixItems`.
+  `items` applies only after the prefix. Keywords the check does not
+  understand are skipped.
 - `validateOutput` checks every array element, treats
   `additionalProperties: false` without `properties` as an empty allow-list,
   and does not warn when a `const` or `enum` comparison passes its nesting

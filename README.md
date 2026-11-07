@@ -106,8 +106,11 @@ registration does not warn and does not block.
 The check is not a full JSON Schema validator and does not add one to the
 page. It covers `type` (including `integer` and a list of types), `required`,
 `properties`, `items`, `enum`, `const`, and `additionalProperties: false`.
-`additionalProperties: false` warns for any own property when `properties`
-is omitted. Every array element is checked against `items`; a warning lists at most
+`additionalProperties: false` warns for any own property that is neither in
+`properties` nor matched by `patternProperties`. A matching
+`patternProperties` value is checked against that subschema. `prefixItems`
+checks tuple positions, and `items` applies only to elements after that
+prefix. Every remaining array element is checked; a warning lists at most
 three paths.
 `const` and `enum` compare nested objects and arrays up to 8 levels. Past
 that the comparison is skipped, so a deep value is not reported as a
