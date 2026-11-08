@@ -16,6 +16,35 @@ publication = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publication)
 
 
+def assert_public_workflow_boundary(workflows):
+    """Check every workflow, including maintenance outside contributor CI."""
+    paths = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
+    assert paths, "expected public workflows"
+    for path in paths:
+        assert "alpininsight/.github-private" not in path.read_text().lower(), (
+            f"{path.name}: public workflows cannot reference the private workflow catalog"
+        )
+
+
+def test_all_public_workflows_respect_visibility_boundary():
+    assert_public_workflow_boundary(ROOT / ".github/workflows")
+
+
+@pytest.mark.parametrize("extension", ["yml", "yaml"])
+def test_public_boundary_rejects_maintenance_caller(tmp_path, extension):
+    """A green contributor workflow cannot mask an inaccessible scheduled caller."""
+    (tmp_path / "ci.yml").write_text("jobs:\n  quality:\n    runs-on: ubuntu-latest\n")
+    caller = tmp_path / f"scheduled-pre-commit-update.{extension}"
+    caller.write_text(
+        "on:\n  schedule:\n    - cron: '0 6 * * 1'\n"
+        "jobs:\n  autoupdate:\n"
+        "    uses: alpininsight/.github-private/.github/workflows/"
+        "scheduled-pre-commit-update-reusable.yml@main\n"
+    )
+    with pytest.raises(AssertionError, match="public workflows cannot reference"):
+        assert_public_workflow_boundary(tmp_path)
+
+
 def test_ci_uses_central_repository_policy():
     """Public repo: the org Repository Policy runs inline on a GitHub-hosted runner.
 
@@ -38,11 +67,9 @@ def test_ci_uses_central_repository_policy():
     assert "repository-policy" in workflow["jobs"]["gate"]["needs"]
     callers = {
         path.name: yaml.safe_load(path.read_text())
-        for path in (ROOT / ".github/workflows").glob("*.yml")
+        for path in (ROOT / ".github/workflows").iterdir()
+        if path.suffix in {".yml", ".yaml"}
     }
-    assert callers["scheduled-pre-commit-update.yml"]["jobs"]["autoupdate"]["uses"].endswith(
-        "/scheduled-pre-commit-update-reusable.yml@main"
-    )
     local_runs = [
         name
         for name, body in callers.items()
