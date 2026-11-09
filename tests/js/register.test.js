@@ -2072,3 +2072,74 @@ describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
     assert.equal(calls, 1);
   });
 });
+
+describe("provider serialization and exposure boundaries", () => {
+  afterEach(() => {
+    delete require.cache[REGISTER_JS];
+    delete globalThis.document;
+    delete globalThis.InsightUiWebmcp;
+  });
+
+  it("passes only a registration signal and cleans up, even with exposedTo supplied", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const external = new AbortController();
+    const result = await api.registerTool({
+      name: "scope_test",
+      description: "Test registration scope",
+      inputSchema: { type: "object" },
+      execute: () => ({}),
+    }, { signal: external.signal, exposedTo: ["https://example.com"] });
+    assert.equal(result.ok, true);
+    assert.deepEqual(Object.keys(ctx.registerCalls[0].options), ["signal"]);
+    assert.equal(ctx.tools.has("scope_test"), true);
+    external.abort();
+    assert.equal(ctx.tools.has("scope_test"), false);
+  });
+
+  it("reports schema serialization failures without escaping registration", async () => {
+    const circular = { type: "object" };
+    circular.properties = { self: circular };
+    const schemas = [
+      circular,
+      { type: "object", toJSON() { return undefined; } },
+      { type: "object", toJSON() { throw new Error("serialization failed"); } },
+    ];
+    for (const [index, inputSchema] of schemas.entries()) {
+      let nativeCalls = 0;
+      const ctx = makeMockContext({ onRegister(tool) {
+        nativeCalls += 1;
+        if (JSON.stringify(tool.inputSchema) === undefined) {
+          throw new TypeError("schema serialization returned undefined");
+        }
+      } });
+      const api = loadHelper(ctx);
+      const result = await api.registerTool({
+        name: "serialization_test", description: "Test serialization",
+        inputSchema, execute: () => ({}),
+      });
+      assert.equal(result.ok, false);
+      assert.equal(typeof result.error, "string");
+      if (index > 0) {
+        assert.equal(nativeCalls, 1);
+        assert.match(result.error, index === 1 ? /returned undefined/ : /serialization failed/);
+      }
+      assert.equal(ctx.tools.size, 0);
+    }
+  });
+
+  it("returns callback values unchanged at the wrapper boundary", async () => {
+    const circular = {};
+    circular.self = circular;
+    for (const value of ["hello", undefined, circular, { ok: true }]) {
+      const ctx = makeMockContext();
+      const api = loadHelper(ctx);
+      const result = await api.registerTool({
+        name: "result_test", description: "Test callback results",
+        inputSchema: { type: "object" }, execute: () => value,
+      });
+      assert.equal(result.ok, true);
+      assert.strictEqual(await ctx.tools.get("result_test").execute({}), value);
+    }
+  });
+});
