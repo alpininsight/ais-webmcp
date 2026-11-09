@@ -275,7 +275,7 @@ def test_registry_readback_accepts_exact_match(monkeypatch, tmp_path):
 
 
 def test_public_docs_do_not_link_private_repositories():
-    """NOTICE and the release runbook stay free of private repository links."""
+    """Public attribution, maintainer docs and config exclude private repo links."""
     notice = (ROOT / "NOTICE").read_text()
     assert "github.com/alpininsight/insight-ui-webmcp" not in notice
     # Full-line equality, not a URL substring check. CodeQL
@@ -287,3 +287,7 @@ def test_public_docs_do_not_link_private_repositories():
     runbook = (ROOT / "docs/ci-and-release.md").read_text()
     assert "alpininsight/.github-private" not in runbook
     assert "ais-webmcp-publish-python.yml" in runbook
+    for name in ("docs/release.md", "renovate.json"):
+        assert "alpininsight/.github-private" not in (ROOT / name).read_text().lower(), (
+            f"{name}: public maintainer files must not retain private repository links"
+        )

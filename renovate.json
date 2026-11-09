@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Run self-hosted from the organisation's central workflow repository. Updates land on develop; develop to main stays a manual promotion.",
+  "description": "Dependency updates target develop; develop to main stays a separate promotion.",
   "extends": [
     "config:recommended"
   ],
@@ -60,13 +60,6 @@
         "pypi"
       ],
       "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Reusable workflows and actions from the central workflow repository are adopted through its release and consumer canary, not by Renovate.",
-      "matchPackageNames": [
-        "alpininsight/.github-private"
-      ],
-      "enabled": false
     },
     {
       "description": "WebMCP host pins (ais-webmcp, insight-ui-webmcp, insight-ui) move with the release order in the open-core standard, not with Renovate.",
