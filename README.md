@@ -15,15 +15,17 @@ Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
 
 ## Status
 
-- Early preview: `ais-webmcp` has been published on PyPI since 20.10.2026
-  (0.1.x; current release 0.1.2). Interfaces may still change.
+- Early preview: `ais-webmcp` has been published on PyPI since 20.10.2026.
+  Interfaces may still change. See [PyPI](https://pypi.org/project/ais-webmcp/)
+  for available versions.
 - WebMCP is a draft of the
   [W3C Web Machine Learning Community Group](https://www.w3.org/community/webmachinelearning/)
   ([draft specification](https://webmachinelearning.github.io/webmcp/)). It is
   not a W3C Standard and is not on the W3C Standards Track. This package
   targets the `document.modelContext` API only.
-- The browser runtime is prepared as the npm package
-  `@alpininsightsolutions/webmcp`; its first npm release is still pending.
+- The browser runtime is packaged as `@alpininsightsolutions/webmcp` for npm.
+  See [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31) for
+  publication status and the npm registry for available versions.
 
 ## Background
 
@@ -175,13 +177,14 @@ copy.
 
 ## npm package
 
-The browser runtime is prepared as the public npm package
-`@alpininsightsolutions/webmcp`; the first npm release is pending. Once
-published, its version matches the Python package. The tarball contains only the built `register.js`, its
-types, this README, `LICENSE`, and `NOTICE` (`package.json` is included
-because npm always packs it). A tarball guard in CI rejects any other path.
+The browser runtime is packaged as `@alpininsightsolutions/webmcp` for npm.
+See [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31) for
+publication status and the npm registry for available versions. The tarball
+contains only the built `register.js`, its types, this README, `LICENSE`, and
+`NOTICE` (`package.json` is included because npm always packs it). A tarball
+guard in CI rejects any other path.
 
-Once published:
+Install an available npm release:
 
 ```bash
 npm install @alpininsightsolutions/webmcp
@@ -227,9 +230,9 @@ if (status.supported) {
 
 A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 
-Releases are published from this repository's GitHub Actions workflow with
-npm Trusted Publishing and provenance; no npm token is stored. The
-maintainer process is described in [docs/release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/release.md).
+The repository's npm publication workflow uses GitHub Actions Trusted Publishing
+and provenance without a stored npm token. The first-publication and maintainer
+process is described in [docs/release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/release.md).
 
 ## Development
 

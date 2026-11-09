@@ -43,11 +43,25 @@ and an authenticated owner alone are not a Trusted Publisher or publication
 receipt. See the current [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/)
 and [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
 
-The release owner completes the manual bootstrap separately, with
-npm's required authentication and an explicitly accepted version and package
-contents. This workflow has no owner-token fallback and never disables
-provenance. The committed `0.0.0` source placeholder is not a release artifact;
-its publication guard must not be bypassed to improvise a bootstrap.
+After source review and promotion, the release owner can approve a separate
+hosted preparation run of `ci.yml` on Main with an accepted candidate tag. The accepted
+nonzero stable tag must point to exactly the current Main commit, whose full
+push CI must have passed. The job builds the final package, signs its exact
+tarball with Sigstore, verifies its identity and uploads a short-lived artifact
+with the tarball, bundle and source/CI receipt. This is preparation only: it
+does not publish, stage, configure trust or use an npm publishing credential.
+No preparation run has yet established an actual Sigstore or registry result.
+Candidate dispatches use a separate concurrency group, so they do not cancel
+Main push CI. Preparation requires a successful push CI for the exact Main
+commit; the candidate's own manual CI is not a substitute for that evidence.
+
+For the manual bootstrap, the owner independently checks the artifact against the approved tag, commit,
+run and attempt. With npm 12.2.2 installed, verify the saved bundle using
+`node scripts/release-candidate.cjs verify TAG package.tgz provenance.sigstore.json SOURCE_SHA RUN_ID ATTEMPT`.
+The owner later handles authentication and required 2FA and separately decides
+whether to publish that exact tarball with `--provenance-file`; neither a
+successful preparation nor this document is publication approval. Never repack
+after signing. The committed `0.0.0` source placeholder cannot be published.
 
 Once the package exists, its GitHub Actions Trusted Publisher must match:
 
@@ -88,6 +102,8 @@ someone works in this source tree; installing the browser runtime does not
 warn on other Node versions.
 
 The workflow publishes with `--ignore-scripts`, so `prepublishOnly` does not
-run there. It stamps the release version before that command. A local
-`npm publish` still runs `prepublishOnly`, which rejects the committed
-`0.0.0` placeholder.
+run there. It stamps the release version before that command. A local source
+`npm publish` runs `prepublishOnly`, which rejects the committed `0.0.0`
+placeholder and requires exactly one provenance option. npm does not run that
+source lifecycle guard when publishing a prebuilt tarball; the owner must use
+the separately verified bundle for the first publication.

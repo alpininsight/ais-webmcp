@@ -41,6 +41,34 @@ def test_events_and_concurrency_preserve_main_and_isolate_metadata():
     assert policy["permissions"] == {"contents": "read", "pull-requests": "read"}
 
 
+def test_candidate_dispatch_uses_separate_concurrency_group():
+    group = WORKFLOW["concurrency"]["group"]
+    legacy = (
+        "webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-"
+        "${{ " + METADATA + " && 'metadata' || 'full' }}"
+    )
+    suffix = (
+        "${{ github.event_name == 'workflow_dispatch' && "
+        "inputs.candidate_tag != '' && '-candidate' || '' }}"
+    )
+    # The unchanged prefix preserves all existing groups; the sole new
+    # expression adds a suffix only for a candidate dispatch.
+    assert group == legacy + suffix
+    assert WORKFLOW["concurrency"]["cancel-in-progress"] is True
+    for event, tag, expected_suffix in [
+        ("push", "", ""),
+        ("pull_request", "", ""),
+        ("workflow_call", "", ""),
+        ("workflow_dispatch", "", ""),
+        ("workflow_dispatch", "v1.2.3", "-candidate"),
+        ("push", "v1.2.3", ""),
+    ]:
+        actual_suffix = "-candidate" if event == "workflow_dispatch" and tag != "" else ""
+        assert actual_suffix == expected_suffix
+        assert legacy + actual_suffix == (legacy + suffix).replace(suffix, expected_suffix)
+    assert legacy != legacy + "-candidate"
+
+
 @pytest.mark.parametrize(
     "event,action,base_changed,expected",
     [

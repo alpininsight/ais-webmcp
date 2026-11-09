@@ -6,11 +6,16 @@ on:
   push:
     branches: [develop, main]
   workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: Accepted stable tag for npm candidate preparation (leave empty for ordinary CI)
+        required: false
+        type: string
   workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'metadata' || 'full' }}
+  group: webmcp-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && !github.event.changes.base && (github.event.action == 'edited' || github.event.action == 'ready_for_review') && 'metadata' || 'full' }}${{ github.event_name == 'workflow_dispatch' && inputs.candidate_tag != '' && '-candidate' || '' }}
   cancel-in-progress: true
 # Public repository: contributor CI runs inline on GitHub-hosted runners.
 # Public callers cannot use the private reusable catalog, and self-hosted
@@ -566,3 +571,76 @@ jobs:
               test "$result" = success
             done
           fi
+  prepare:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && github.repository == 'alpininsight/ais-webmcp' && inputs.candidate_tag != ''
+    runs-on: ubuntu-latest
+    environment: npm-ais-webmcp
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check source and exact Main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && "$SOURCE_TAG" != v0.0.0 ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ "$(git rev-parse "refs/tags/$SOURCE_TAG^{commit}")" == "$GITHUB_SHA" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_TAG" --jq .sha)" == "$GITHUB_SHA" ]]
+          mkdir "$RUNNER_TEMP/candidate"
+          python3 scripts/check-main-ci.py "$GITHUB_SHA" > "$RUNNER_TEMP/candidate/main-ci.json"
+      - name: Build and pack the final source
+        env:
+          SOURCE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          npm install -g npm@12.2.2
+          [[ "$(npm --version)" == 12.2.2 ]]
+          npm ci --ignore-scripts
+          npm run check:js-build
+          npm test
+          npm run check:pack
+          node scripts/sync-npm-version.cjs --version "${SOURCE_TAG#v}"
+          npm run build:release
+          npm pack --ignore-scripts --json > "$RUNNER_TEMP/pack.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads(Path(os.environ['RUNNER_TEMP'], 'pack.json').read_text())
+          if len(files) != 1:
+              raise SystemExit('expected one tarball')
+          name = files[0]['filename']
+          if not isinstance(name, str) or Path(name).name != name or not name.endswith('.tgz'):
+              raise SystemExit('invalid tarball filename')
+          Path(name).rename(Path(os.environ['RUNNER_TEMP'], 'candidate-input.tgz'))
+          PY
+      - name: Recheck Main and attest the exact tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check-main-ci.py "$GITHUB_SHA" > "$RUNNER_TEMP/candidate/main-ci.json"
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_TAG" --jq .sha)" == "$GITHUB_SHA" ]]
+          unset GH_TOKEN
+          node scripts/release-candidate.cjs generate "$SOURCE_TAG" "$RUNNER_TEMP/candidate-input.tgz" "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          retention-days: 3

@@ -29,7 +29,7 @@ test("package metadata is the public scoped runtime", () => {
   // explicit issue tracker URL is public when the package page goes live.
   assert.equal(manifest.homepage, "https://insight-ui-webmcp.alpininsight.ai/");
   assert.equal(manifest.bugs.url, "https://github.com/alpininsight/ais-webmcp/issues");
-  assert.deepEqual(manifest.publishConfig, { access: "public", provenance: true });
+  assert.deepEqual(manifest.publishConfig, { access: "public" });
   assert.equal(manifest.main, "./src/ais_webmcp/assets/register.js");
   assert.equal(manifest.types, "./src/ais_webmcp/assets/register.d.ts");
   assert.equal(manifest.exports["."].default, "./src/ais_webmcp/assets/register.js");

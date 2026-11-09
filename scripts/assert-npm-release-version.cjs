@@ -10,9 +10,22 @@
 const { assertReleaseVersion } = require("./sync-npm-version.cjs");
 const pkg = require("../package.json");
 
-try {
-  assertReleaseVersion(pkg.version);
-} catch (error) {
-  process.stderr.write(`${error.message}\n`);
-  process.exit(1);
+function assertProvenance(env) {
+  const provenance = env.npm_config_provenance === "true";
+  const file = Boolean(env.npm_config_provenance_file?.trim());
+  if (provenance === file) {
+    throw new Error("npm publish requires exactly one of --provenance or --provenance-file");
+  }
 }
+
+if (require.main === module) {
+  try {
+    assertReleaseVersion(pkg.version);
+    assertProvenance(process.env);
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
+}
+
+module.exports = { assertProvenance };
