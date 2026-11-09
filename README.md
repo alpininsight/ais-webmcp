@@ -262,3 +262,75 @@ The repository documents code versus metadata checks, Main CI reuse and the
 central build-once Python publication handoff for maintainers.
 GitHub releases and asset delivery run outside this public repository; see
 [docs/ci-and-release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/ci-and-release.md).
+
+## Provider scope and in-page clients
+
+This package provides registration and lifecycle helpers, not an in-page
+agent client. No client helpers are planned without a concrete product need.
+Where supported, use the browser's native APIs directly, for example:
+
+```js
+const context = document.modelContext;
+if (context && typeof context.getTools === "function" &&
+    typeof context.executeTool === "function") {
+  const refresh = async () => {
+    const tools = await context.getTools();
+    console.log(tools.map(({ name, origin }) => ({ name, origin })));
+    return tools;
+  };
+  context.addEventListener("toolchange", refresh);
+  const tools = await refresh();
+  const tool = tools.find((item) => item.name === "example_tool" &&
+    item.origin === location.origin && item.window === window);
+  if (tool) {
+    const controller = new AbortController();
+    const result = await context.executeTool(tool, {}, { signal: controller.signal });
+    console.log(result);
+  }
+  // When the client is disposed: context.removeEventListener("toolchange", refresh);
+}
+```
+
+A `RegisteredTool` identifies its owner with `origin` and `window`; keep the
+returned object for `executeTool` rather than reconstructing it. The optional
+execution signal cancels an invocation. Cancellation cannot undo work already
+done by a callback. The draft specifies a serialized string result. Browser
+behavior is evolving; [upstream issue 361](https://github.com/webmachinelearning/webmcp/issues/361)
+tracks a difference for strings and undefined results. Handle failures and
+verify the target browser rather than assuming a particular serialization.
+`toolchange` should trigger rediscovery, not an assumption of one event per
+registration; [upstream issue 374](https://github.com/webmachinelearning/webmcp/issues/374)
+tracks batching.
+
+Cross-origin tool exposure is **not supported by this helper** for this
+release: it does not pass `exposedTo` to native registration. The draft's
+same-origin default applies to the tools it registers; the helper does not
+implement or test browser isolation. Native cross-origin use requires the
+embedder's `tools` Permissions Policy delegation, the provider's explicit
+`exposedTo` and the client's `fromOrigins` opt-in, subject to the browser's
+origin checks. See the [draft security model](https://webmachinelearning.github.io/webmcp/#security-and-privacy-considerations).
+
+## Input schemas and serialization
+
+The WebMCP draft makes `inputSchema` optional. This package's manifest and
+registration policy is stricter: each tool requires exactly one object input
+schema with `type: "object"`. For a tool taking no arguments, use:
+
+```js
+await InsightUiWebmcp.registerTool({
+  name: "refresh_page_data",
+  description: "Refresh the current page data.",
+  inputSchema: { type: "object", properties: {} },
+  execute: async () => ({ refreshed: true }),
+});
+```
+
+The helper validates schemas and forwards the schema object to the browser.
+Native registration performs its own serialization and can reject circular
+schemas or schema `toJSON` failures. Registration errors are returned as a
+failed helper result. The callback wrapper forwards the resolved value as-is,
+including strings, undefined and values that native serialization cannot
+represent; it does not claim those values are accepted by a browser. Browser
+serialization and output validation are separate from the helper's optional
+warning-only output check. See the [draft specification](https://webmachinelearning.github.io/webmcp/)
+and [upstream validation discussion](https://github.com/webmachinelearning/webmcp/issues/92).
