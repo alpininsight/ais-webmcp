@@ -2,8 +2,10 @@
 
 `@alpininsightsolutions/webmcp` is the public browser runtime. Publishing
 runs from `.github/workflows/npm-publish.yml`. It is a manual
-`workflow_dispatch` on `main` with a stable `vX.Y.Z` tag. That tag must point
-at the `main` commit. The job uses environment `npm-ais-webmcp` and
+`workflow_dispatch` on `main` with a stable `vX.Y.Z` tag. That tag must identify
+an accepted release commit reachable from `main`. Later Main fixes do not
+change an older tag or its distribution contents. The job uses environment
+`npm-ais-webmcp` and
 permissions `contents: read` and `id-token: write`. It checks out the tag,
 installs Node from `.nvmrc` (Node 24) and npm 11.5.1, runs
 `npm ci --ignore-scripts` and `npm run check:pack`, then stamps the tag into
@@ -15,7 +17,8 @@ runs `npm run build:release`, packs the tarball, and runs
 Trusted Publishing attaches provenance. No npm token. The trusted publisher
 is bound to GitHub repository `alpininsight/ais-webmcp`, workflow filename
 `npm-publish.yml`, and environment `npm-ais-webmcp`. A release goes out only
-with the release owner's go. The first publish is the manual bootstrap from `main`.
+with the release owner's go. The initial owner bootstrap is separate from
+this OIDC workflow.
 
 ## Version
 
@@ -31,30 +34,41 @@ pre-release versions, a private package, and a files allowlist that omits
 `LICENSE` or `NOTICE`. The next step runs `npm run build:release`, which
 builds `register.js` from that version.
 
-## One-time setup on npmjs.com
+## First publication and trusted-publisher setup
 
-Owner: the release owner (maintainer). Publish only with the release owner's go.
+A package must exist on npm before its package-level Trusted Publisher can be
+configured. Do not dispatch this OIDC workflow for a name that has not yet
+completed its maintainer-owned first-publication setup. An npm organization
+and an authenticated owner alone are not a Trusted Publisher or publication
+receipt. See the current [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/)
+and [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
 
-1. Sign in at [npmjs.com](https://www.npmjs.com) as an owner of the
-   `alpininsightsolutions` organization. Create that organization if it does
-   not exist. The package scope is `@alpininsightsolutions`.
-2. Add a GitHub Actions trusted publisher for `@alpininsightsolutions/webmcp`
-   (organization trusted publishers for a package that does not exist yet, or
-   the package's Settings → Trusted Publisher after it exists):
-   - GitHub organization or user: `alpininsight`
-   - Repository: `ais-webmcp`
-   - Workflow filename: `npm-publish.yml`
-   - Environment name: `npm-ais-webmcp`
-   - Allowed actions: enable direct `npm publish`. `npm stage publish` is
-     always allowed. Trusted publishers created after 3 September 2026 default
-     to staged publishing only. This workflow publishes directly and attaches
-     provenance, so leave the publisher able to publish directly.
-3. In this repository's Actions settings, create an environment named
-   `npm-ais-webmcp`. Add the usual required reviewers. Add no secrets and no
-   npm token. The publish job sets that environment.
-4. Do not create an npm automation token or granular access token. The first
-   publish is the manual bootstrap: run `npm-publish.yml` with
-   `workflow_dispatch` from `main`, and only with the release owner's go.
+The release owner completes the manual bootstrap separately, with
+npm's required authentication and an explicitly accepted version and package
+contents. This workflow has no owner-token fallback and never disables
+provenance. The committed `0.0.0` source placeholder is not a release artifact;
+its publication guard must not be bypassed to improvise a bootstrap.
+
+Once the package exists, its GitHub Actions Trusted Publisher must match:
+
+- GitHub organization: `alpininsight`
+- Repository: `ais-webmcp`
+- Workflow filename: `npm-publish.yml`
+- Environment: `npm-ais-webmcp`
+- Direct-publish permission: required by this workflow's `npm publish`
+  command; a stage-only connection is insufficient.
+
+The matching GitHub environment requires the normal release approval and
+accepts Main only. Do not add an npm token to this workflow. A newly configured
+publisher must be validated within npm's documented expiry period; verify the
+actual current connection before publishing.
+
+For every release, validate the exact tag's dependencies and actual packed
+files. An audit of current Main is not evidence for an older tag. After the
+approved workflow completes, independently read back the registry version,
+tarball integrity and provenance, then install that registry tarball in a
+fresh JavaScript/TypeScript consumer. A successful local pack or build is not
+publication evidence.
 
 ## Enterprise code never goes to npm
 
