@@ -1,12 +1,10 @@
-# CI and Python release evidence
+# Contributor CI and build checks
 
 ## Code and metadata checks
 
 `ci.yml` runs the full test matrix for PR opening, new commits, reopening and
 base-branch retargeting (`edited` with `changes.base`). Pushes to both `develop`
-and `main` also run full CI. The private release/CDN executor requires this
-exact-head push evidence for the selected protected source branch. Manual CI
-remains available.
+and `main` also run full CI. Manual CI remains available.
 
 Title/body edits and `ready_for_review` run read-only Repository Policy and a
 Quality Gate that **revalidates existing full CI evidence**, without rerunning
@@ -34,61 +32,11 @@ Require **both** `WebMCP Quality Gate` and
 quality are independent: an invalid title can fail Policy while tested code keeps
 its green Quality Gate. Correcting the title then runs only metadata checks.
 
-## Release and CDN run in the central executor
+## Local checks and distributions
 
-This repository is public. GitHub does not let public repositories call private
-reusable workflows, so the former `release.yml` and `cdn-develop.yml` were removed.
-GitHub releases and CDN uploads now run in the organisation's central publishing
-repository (set `PUBLISHER_REPO` to it) through `ais-webmcp-release-assets.yml`.
-That executor checks out this repository at an exact source SHA. It accepts only
-the current protected `develop` or `main` head whose latest exact-SHA **push** run
-of `ci.yml` completed successfully; `ci.yml` therefore runs on pushes to both
-branches. `publish=false` builds only; publication needs the executor's own
-activation flag.
-
-```bash
-gh workflow run ais-webmcp-release-assets.yml \
-  --repo "${PUBLISHER_REPO:?}" --ref main \
-  -f source_channel=main -f source_sha="$SOURCE_SHA" -f target=release -F publish=true
-```
-
-npm publication stays in this repository (`npm-publish.yml`), because npm
-Trusted Publishing is bound to this repository and workflow file.
-
-After the source release, run the build-only producer workflow in the
-organisation's central publishing repository (set `PUBLISHER_REPO` to it):
-
-```bash
-gh workflow run ais-webmcp-publish-python.yml \
-  --repo "${PUBLISHER_REPO:?}" --ref main \
-  -f source_sha="$SOURCE_SHA" -F publish=false
-```
-
-Wait for that producer to finish successfully. Read back its exact run ID, current
-attempt and immutable artifact ID from that run and its artifact inventory. Check
-that its schema-3 manifest binds this source SHA/version and producer identity.
-Set `PRODUCER_RUN_ID`, `PRODUCER_ATTEMPT` and `ARTIFACT_ID` to those verified IDs.
-After publication authorization, request reuse of those same tested files:
-
-```bash
-gh workflow run ais-webmcp-publish-python.yml \
-  --repo "${PUBLISHER_REPO:?}" --ref main \
-  -f source_sha="$SOURCE_SHA" -F publish=true \
-  -f producer_run_id="${PRODUCER_RUN_ID:?}" \
-  -f producer_attempt="${PRODUCER_ATTEMPT:?}" \
-  -f artifact_id="${ARTIFACT_ID:?}"
-```
-
-All three producer IDs are required. No legacy-bundle fallback or second package
-build is permitted in the publication run. It must revalidate the producer,
-source/CI/release, manifest and file hashes; the existing protected environment,
-reviewer, enablement flag and isolated OIDC upload job remain required. A build-only
-success is not an upload, CDN receipt, consumer deployment or native-browser proof.
-
-## Separate CDN contract
-
-After PyPI publication, run the executor with `target=cdn` for `main`. It keeps the
-delivery build, exact PyPI-file readback (`check_publication.py bundle/index`),
-static-assets publication and independent CDN-byte/header evidence
-(`check_publication.py cdn`). `source_channel=develop` publishes only the mutable
-`develop` preview alias.
+The contributor setup and local checks are described in the repository
+[README](../README.md). The `npm-pack` CI job checks the package allowlist;
+the quality gate requires that check alongside the other configured checks.
+CI evidence applies to the tested source revision. It does not establish that
+a distribution was published or that its published bytes match the source.
+For distribution and provenance guidance, see [release-audit.md](release-audit.md).

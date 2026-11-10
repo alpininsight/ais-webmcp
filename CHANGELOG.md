@@ -57,23 +57,15 @@
 
 ## 0.1.0 and 0.1.1
 
-- Separate PR metadata policy checks from code CI, remove duplicate Develop-push
-  matrices, and reuse exact Main-push evidence for source releases. Build stable
-  Python files once in the central producer and publish the reviewed bundle by
-  immutable producer/run/attempt/artifact IDs. Keep CDN evidence separate.
+- Separate PR metadata policy checks from code CI and retain source-specific
+  CI and distribution integrity evidence.
 
 - Document `npm install @alpininsightsolutions/webmcp`, the
   `InsightUiWebmcp` import, and `window.InsightUiWebmcp` from a script tag.
   The packages-at-a-glance diagram shows the same `register.js` runtime from
   PyPI, npm, and the CDN.
-- Publish npm releases from `.github/workflows/npm-publish.yml` in this
-  repository on `ubuntu-latest`. The file is the organisation's canonical npm
-  publish workflow. It checks out the `vX.Y.Z` tag, stamps that
-  version, and runs `npm publish --provenance --access public
-  --ignore-scripts`. The trusted publisher is `alpininsight/ais-webmcp`,
-  workflow `npm-publish.yml`, environment `npm-ais-webmcp`. Releases go out
-  only with the release owner's go. The first publish is the manual bootstrap.
-  `prepublishOnly` rejects the `0.0.0` placeholder for a local publish.
+- Add npm release checks for stable versions and provenance. `prepublishOnly`
+  rejects the `0.0.0` placeholder for a local publish.
 - Type the browser runtime as one CommonJS export. Tool specs accept named
   interfaces, either `id` or `name`, and exactly one input-schema alias whose
   `type` is `"object"`. At most one of `outputSchema` or `output_schema` is

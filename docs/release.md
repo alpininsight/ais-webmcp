@@ -79,8 +79,8 @@ and fails when any other path is present, when
 `LICENSE` or `NOTICE` is missing, or when any path matches `enterprise/`,
 `webmcp_check`, or `.env`.
 
-Python sources, tests, schemas, delivery scripts, and anything under an
-enterprise tree stay in the repository. They are not part of the npm package.
+Python sources, tests, schemas, and delivery scripts are not part of the npm
+package. The pack guard also rejects enterprise paths if they appear in it.
 
 The published `package.json` does not set `engines`. Node 24 is the
 repository pin (`.nvmrc` and `devEngines`). `devEngines` applies when
