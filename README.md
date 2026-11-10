@@ -15,15 +15,18 @@ Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
 
 ## Status
 
-- Early preview: `ais-webmcp` has been published on PyPI since 20.10.2026
-  (0.1.x; current release 0.1.2). Interfaces may still change.
+- Early preview: `ais-webmcp` has been published on PyPI since 20.10.2026.
+  Interfaces may still change. See [PyPI](https://pypi.org/project/ais-webmcp/)
+  for available versions.
 - WebMCP is a draft of the
   [W3C Web Machine Learning Community Group](https://www.w3.org/community/webmachinelearning/)
   ([draft specification](https://webmachinelearning.github.io/webmcp/)). It is
   not a W3C Standard and is not on the W3C Standards Track. This package
   targets the `document.modelContext` API only.
-- The browser runtime is prepared as the npm package
-  `@alpininsightsolutions/webmcp`; its first npm release is still pending.
+- The npm package `@alpininsightsolutions/webmcp` has a metadata-only
+  bootstrap at version `0.0.1`; it does not contain the browser runtime or
+  TypeScript declarations. Check [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31)
+  and the npm registry for runtime release availability.
 
 ## Background
 
@@ -39,14 +42,15 @@ how to contribute in the [documentation](https://insight-ui-webmcp.alpininsight.
 
 ## Packages at a glance
 
-One browser runtime, `register.js`, ships in the Python package and in the
-npm package.
+Three distributions serve different needs. The core Python package and npm
+runtime releases use the same browser runtime, `register.js`; the Django
+adapter uses the installed core instead of shipping another copy.
 
 ```mermaid
 flowchart LR
   Core["ais-webmcp (PyPI)<br/>manifest, CLI, register.js"]
   Django["insight-ui-webmcp (PyPI)<br/>Django adapter"]
-  NPM["@alpininsightsolutions/webmcp (npm)<br/>register.js only"]
+  NPM["@alpininsightsolutions/webmcp (npm)<br/>browser runtime and types"]
   Core --> Django
   Core --> NPM
   Django --> S1["Django sites"]
@@ -55,8 +59,10 @@ flowchart LR
 
 - `ais-webmcp` on PyPI is the core: manifests, the CLI, and `register.js`.
   The Django adapter `insight-ui-webmcp` installs that core.
-- `@alpininsightsolutions/webmcp` on npm contains `register.js` only, for
-  other websites.
+- `insight-ui-webmcp` on PyPI is the Django adapter for the core.
+- Runtime releases of `@alpininsightsolutions/webmcp` on npm provide
+  `register.js` and TypeScript declarations for websites without the Python
+  or Django integration. The metadata-only `0.0.1` bootstrap does not.
 
 The unscoped npm package `webmcp` is unrelated.
 
@@ -175,13 +181,15 @@ copy.
 
 ## npm package
 
-The browser runtime is prepared as the public npm package
-`@alpininsightsolutions/webmcp`; the first npm release is pending. Once
-published, its version matches the Python package. The tarball contains only the built `register.js`, its
-types, this README, `LICENSE`, and `NOTICE` (`package.json` is included
-because npm always packs it). A tarball guard in CI rejects any other path.
+Runtime releases of `@alpininsightsolutions/webmcp` contain the built
+`register.js`, its types, this README, `LICENSE`, and `NOTICE` (`package.json`
+is included because npm always packs it). A tarball guard in CI rejects any
+other path. Version `0.0.1` is a metadata-only bootstrap and does not contain
+the runtime or types. See [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31)
+and the npm registry for available runtime releases and their distribution tags.
 
-Once published:
+An unqualified install selects npm's `latest` tag. First verify that `latest`
+points to a runtime release rather than the `0.0.1` bootstrap; then install:
 
 ```bash
 npm install @alpininsightsolutions/webmcp
@@ -227,9 +235,9 @@ if (status.supported) {
 
 A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 
-Releases are published from this repository's GitHub Actions workflow with
-npm Trusted Publishing and provenance; no npm token is stored. The
-maintainer process is described in [docs/release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/release.md).
+The repository's npm publication workflow uses GitHub Actions Trusted Publishing
+and provenance without a stored npm token. The first-publication and maintainer
+process is described in [docs/release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/release.md).
 
 ## Development
 
