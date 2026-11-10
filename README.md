@@ -264,11 +264,9 @@ The framework-independent core was split from the Django adapter
 insight-ui-webmcp at commit `d6ead80843dbe42096791dd6688ed58a35dc3291`. The
 core's history and existing host pins are preserved.
 
-## CI and Python release
+## Contributor CI
 
-The repository documents code versus metadata checks, Main CI reuse and the
-central build-once Python publication handoff for maintainers.
-GitHub releases and asset delivery run outside this public repository; see
+Contributor CI checks are described in
 [docs/ci-and-release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/ci-and-release.md).
 
 ## Provider scope and in-page clients

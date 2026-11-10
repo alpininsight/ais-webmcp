@@ -201,17 +201,17 @@ def test_npm_publish_runs_in_this_repository():
     assert "npm-pack" in ci["jobs"]["gate"]["needs"]
 
 
-def test_release_and_cdn_run_in_the_central_executor():
-    """Public repositories cannot call private reusables; release/CDN moved out."""
+def test_public_ci_and_release_boundaries():
+    """Retain contributor CI and prevent the removed public release callers."""
     workflows = ROOT / ".github/workflows"
     for name in ("release.yml", "cdn-develop.yml"):
         assert not (workflows / name).exists(), name
-    runbook = (ROOT / "docs/ci-and-release.md").read_text()
-    assert "ais-webmcp-release-assets.yml" in runbook
-    assert "npm-publish.yml" in runbook
     ci = yaml.safe_load((workflows / "ci.yml").read_text())
-    push = ci.get("on", ci.get(True))["push"]["branches"]
-    assert set(push) == {"develop", "main"}
+    triggers = ci.get("on", ci.get(True))
+    assert set(triggers["push"]["branches"]) == {"develop", "main"}
+    assert {"opened", "synchronize", "reopened", "edited"} <= set(triggers["pull_request"]["types"])
+    assert ci["jobs"]["npm-pack"]["runs-on"] == "ubuntu-latest"
+    assert "npm-pack" in ci["jobs"]["gate"]["needs"]
 
 
 @pytest.mark.parametrize(
@@ -286,7 +286,7 @@ def test_public_docs_do_not_link_private_repositories():
     ), "expected public documentation line in NOTICE"
     runbook = (ROOT / "docs/ci-and-release.md").read_text()
     assert "alpininsight/.github-private" not in runbook
-    assert "ais-webmcp-publish-python.yml" in runbook
+    assert "release-audit.md" in runbook
     for name in ("docs/release.md", "renovate.json"):
         assert "alpininsight/.github-private" not in (ROOT / name).read_text().lower(), (
             f"{name}: public maintainer files must not retain private repository links"
