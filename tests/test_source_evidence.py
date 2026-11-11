@@ -188,3 +188,20 @@ def test_source_identity_rejects_wrong_repository_or_revision(evidence, repo, sh
     with pytest.raises(ValueError):
         publication.check_source(repo, sha)
     assert evidence["calls"] == []
+
+
+@pytest.mark.parametrize("count", [-1, 0, 2])
+def test_partial_or_inconsistent_source_job_inventory_is_rejected(evidence, count):
+    evidence["jobs"]["total_count"] = count
+    with pytest.raises(ValueError, match="job inventory"):
+        publication.check_source(REPO, SHA)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [[], {"total_count": 1, "jobs": None}, {"total_count": 1, "jobs": [None]}],
+)
+def test_malformed_source_job_inventory_is_rejected(evidence, response):
+    evidence["jobs"] = response
+    with pytest.raises(ValueError, match="job inventory"):
+        publication.check_source(REPO, SHA)
