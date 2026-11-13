@@ -1,7 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-11-13)
 
+- First PyPI release of the changes listed under `0.2.0`, published on PyPI
+  and npm with the same version number.
+- The README states that the browser runtime is published on npm as
+  `@alpininsightsolutions/webmcp` `0.2.0` under the `latest` tag with
+  provenance. The wording about a metadata-only `0.0.1` bootstrap is removed.
+  npm releases start at `0.2.0`; from `0.2.1` on, PyPI and npm releases share
+  the same version number.
+- The PyPI `Changelog` project URL points to `CHANGELOG.md` on `main`
+  instead of `develop`.
+
+## 0.2.0 (2026-11-13)
+
+- First runtime release of the browser runtime on npm as
+  `@alpininsightsolutions/webmcp`, published with Trusted Publishing and
+  provenance under the `latest` tag. This version was not published on PyPI;
+  the next PyPI release is `0.2.1`.
 - `validateOutput` does not execute schema regular expressions. String
   `pattern` and `patternProperties` are skipped. A schema that has
   `patternProperties` does not check `additionalProperties: false`. Warning
@@ -23,8 +39,8 @@
   validation. Mismatch behavior remains open in webmachinelearning/webmcp#92.
 - A schema that is not a JSON object, or not a valid Draft 2020-12 schema,
   is an error. A missing `outputSchema` stays a low finding.
-- Publish PyPI project URLs for this repository, its issue tracker, and
-  `CHANGELOG.md` on the `develop` branch. The Apache-2.0 license stays a
+- Set PyPI project URLs for this repository, its issue tracker, and
+  `CHANGELOG.md`. The Apache-2.0 license stays a
   PEP 639 `License-Expression`, and the OSI Apache license classifier is set.
   The package is not marked `Typing :: Typed`.
 - `ais-webmcp validate` rejects invisible or control characters in tool
