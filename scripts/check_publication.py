@@ -1,8 +1,4 @@
-"""Read-only release gates; PyPI uploads run in the private per-package publishers.
-
-The GitHub release and the CDN need the protected main source with a green gate; the CDN also
-needs its own PyPI project to carry exactly this reproducible build.
-"""
+"""Read-only checks for source CI, local bundles, and public registry checksums."""
 
 from __future__ import annotations
 
@@ -91,7 +87,7 @@ def check_source(repository, revision, *, require_merged_pr=False):
 
 
 def require_main_promotion(repository, revision):
-    """The merged source promotion authorizes the release; approval remains central."""
+    """Require the exact source SHA to come from a merged promotion into main."""
     for page in range(1, 21):
         pulls = api(f"repos/{repository}/commits/{revision}/pulls?per_page=100&page={page}")
         if not isinstance(pulls, list):
@@ -216,103 +212,6 @@ def verify_bundle(bundle, revision, version):
 
 
 PROJECTS = ("ais-webmcp",)
-CDN_ROOT = "https://cdn.alpininsight.ai/ais-webmcp"
-
-
-def verify_cdn(bundle, version):
-    """Read all canonical objects in full; an edge challenge is a failed gate.
-
-    This supplements the central uploader's exhaustive R2 check and sampled
-    public header probe. It neither uploads nor bypasses the public edge.
-    """
-    if (
-        not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version)
-        or version == "0.0.0"
-    ):
-        raise ValueError("CDN verification requires a final nonzero release version")
-    inventory = json.loads((bundle / "cdn/inventory.json").read_text())
-    if inventory["version"] != version or inventory["cdn_prefix"] != "ais-webmcp":
-        raise ValueError("CDN namespace or version mismatch")
-    paths = {entry["path"] for entry in inventory["files"] if entry["path"].startswith("cdn/")}
-    if paths != {"cdn/register.js", "cdn/webmcp-manifest.schema.json"}:
-        raise ValueError("CDN inventory must contain both runtime resources")
-    paths.add("cdn/inventory.json")
-    origin = "https://insight-ui.com"
-    report = []
-    # One shared budget, including a 60-second margin beyond the mutable TTL.
-    mutable_deadline = time.monotonic() + 360
-    for alias in (f"v{version}", "main", "latest"):
-        immutable = alias.startswith("v")
-        for relative in sorted(paths):
-            path = bundle / relative
-            if path.is_symlink():
-                raise ValueError("CDN artifact symlink rejected")
-            expected = path.read_bytes()
-            url = f"{CDN_ROOT}/{alias}/{path.name}"
-            while True:
-                try:
-                    report.append(_verify_cdn_object(url, path, expected, immutable, origin))
-                    break
-                except ValueError:
-                    # Mutable aliases can still serve the previous release for the
-                    # uploader's entire 300-second TTL. Retry canonical URLs only;
-                    # immutable defects and HTTP challenges fail immediately.
-                    remaining = mutable_deadline - time.monotonic()
-                    if immutable or remaining <= 0:
-                        raise
-                    time.sleep(min(20, remaining))
-    return report
-
-
-def _verify_cdn_object(url, path, expected, immutable, origin):
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Origin": origin,
-            "User-Agent": "AlpinInsight-WebMCP-PublicationVerifier/1.0",
-            "Accept": "*/*",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        if response.status != 200 or response.geturl() != url:
-            raise ValueError(f"canonical CDN GET failed: {url}")
-        data = response.read(len(expected) + 1)
-        content_type = response.headers.get_content_type()
-        allowed_types = (
-            {"application/javascript", "text/javascript"}
-            if path.suffix == ".js"
-            else {"application/json"}
-        )
-        cache = response.headers.get("Cache-Control", "")
-        directives = [part.strip().lower() for part in cache.split(",")]
-        max_age = "max-age=31536000" if immutable else "max-age=300"
-        if (
-            "public" not in directives
-            or directives.count(max_age) != 1
-            or sum(part.startswith("max-age=") for part in directives) != 1
-            or any(
-                part.split("=", 1)[0] in {"private", "no-cache", "no-store"} for part in directives
-            )
-            or ("immutable" in directives) != immutable
-        ):
-            raise ValueError(f"CDN cache policy mismatch: {url}")
-        if content_type not in allowed_types:
-            raise ValueError(f"CDN Content-Type mismatch: {url}")
-        cors_values = response.headers.get_all("Access-Control-Allow-Origin", [])
-        if len(cors_values) != 1 or cors_values[0] not in {"*", origin}:
-            raise ValueError(f"CDN CORS mismatch: {url}")
-    digest = hashlib.sha256(data).hexdigest()
-    if len(data) != len(expected) or digest != hashlib.sha256(expected).hexdigest():
-        raise ValueError(f"CDN public bytes mismatch: {url}")
-    cors = cors_values[0]
-    return {
-        "url": url,
-        "size": len(data),
-        "sha256": digest,
-        "content_type": content_type,
-        "cache_control": cache,
-        "cors": cors,
-    }
 
 
 def project_files(bundle, name):
@@ -342,14 +241,13 @@ def verify_index(bundle, version, projects=PROJECTS):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("source", "bundle", "index", "cdn"))
+    parser.add_argument("command", choices=("source", "bundle", "index"))
     parser.add_argument("--repository")
     parser.add_argument("--require-merged-pr", action="store_true")
     parser.add_argument("--sha")
     parser.add_argument("--version")
     parser.add_argument("--bundle", type=Path, default=Path("bundle"))
     parser.add_argument("--project", choices=PROJECTS)
-    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     if args.command == "source":
         print(
@@ -359,12 +257,6 @@ if __name__ == "__main__":
         )
     elif args.command == "bundle":
         verify_bundle(args.bundle, args.sha, args.version)
-    elif args.command == "cdn":
-        report = verify_cdn(args.bundle, args.version)
-        if args.report:
-            args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-        else:
-            print(json.dumps(report, indent=2, sort_keys=True))
     else:
         projects = (args.project,) if args.project else PROJECTS
         for attempt in range(15):
