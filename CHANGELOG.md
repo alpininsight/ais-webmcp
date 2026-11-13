@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-11-13)
 
+- First PyPI release of the changes listed under `0.2.0`, published on PyPI
+  and npm with the same version number.
 - The README states that the browser runtime is published on npm as
   `@alpininsightsolutions/webmcp` `0.2.0` under the `latest` tag with
   provenance. The wording about a metadata-only `0.0.1` bootstrap is removed.
