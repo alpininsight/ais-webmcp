@@ -27,7 +27,7 @@ Homepage = "https://insight-ui-webmcp.alpininsight.ai/"
 Documentation = "https://insight-ui-webmcp.alpininsight.ai/"
 Repository = "https://github.com/alpininsight/ais-webmcp"
 Issues = "https://github.com/alpininsight/ais-webmcp/issues"
-Changelog = "https://github.com/alpininsight/ais-webmcp/blob/develop/CHANGELOG.md"
+Changelog = "https://github.com/alpininsight/ais-webmcp/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ais-webmcp = "ais_webmcp.cli:main"

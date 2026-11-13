@@ -76,9 +76,7 @@ def test_pypi_metadata_urls_and_apache_license():
     assert urls["Documentation"] == "https://insight-ui-webmcp.alpininsight.ai/"
     assert urls["Repository"] == "https://github.com/alpininsight/ais-webmcp"
     assert urls["Issues"] == "https://github.com/alpininsight/ais-webmcp/issues"
-    assert (
-        urls["Changelog"] == "https://github.com/alpininsight/ais-webmcp/blob/develop/CHANGELOG.md"
-    )
+    assert urls["Changelog"] == "https://github.com/alpininsight/ais-webmcp/blob/main/CHANGELOG.md"
 
 
 @pytest.mark.integration

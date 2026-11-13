@@ -23,10 +23,11 @@ Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
   ([draft specification](https://webmachinelearning.github.io/webmcp/)). It is
   not a W3C Standard and is not on the W3C Standards Track. This package
   targets the `document.modelContext` API only.
-- The npm package `@alpininsightsolutions/webmcp` has a metadata-only
-  bootstrap at version `0.0.1`; it does not contain the browser runtime or
-  TypeScript declarations. Check [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31)
-  and the npm registry for runtime release availability.
+- The browser runtime has been published on npm as
+  [`@alpininsightsolutions/webmcp`](https://www.npmjs.com/package/@alpininsightsolutions/webmcp)
+  since version `0.2.0` (13.11.2026), under the `latest` tag and with
+  provenance. npm releases start at `0.2.0`; from `0.2.1` on, PyPI and npm
+  releases share the same version number.
 
 ## Background
 
@@ -60,9 +61,9 @@ flowchart LR
 - `ais-webmcp` on PyPI is the core: manifests, the CLI, and `register.js`.
   The Django adapter `insight-ui-webmcp` installs that core.
 - `insight-ui-webmcp` on PyPI is the Django adapter for the core.
-- Runtime releases of `@alpininsightsolutions/webmcp` on npm provide
-  `register.js` and TypeScript declarations for websites without the Python
-  or Django integration. The metadata-only `0.0.1` bootstrap does not.
+- `@alpininsightsolutions/webmcp` on npm provides `register.js` and
+  TypeScript declarations for websites without the Python or Django
+  integration.
 
 The unscoped npm package `webmcp` is unrelated.
 
@@ -181,15 +182,14 @@ copy.
 
 ## npm package
 
-Runtime releases of `@alpininsightsolutions/webmcp` contain the built
-`register.js`, its types, this README, `LICENSE`, and `NOTICE` (`package.json`
-is included because npm always packs it). A tarball guard in CI rejects any
-other path. Version `0.0.1` is a metadata-only bootstrap and does not contain
-the runtime or types. See [issue #31](https://github.com/alpininsight/ais-webmcp/issues/31)
-and the npm registry for available runtime releases and their distribution tags.
+`@alpininsightsolutions/webmcp` contains the built `register.js`, its types,
+this README, `LICENSE`, and `NOTICE` (`package.json` is included because npm
+always packs it). A tarball guard in CI rejects any other path. The first
+runtime release is `0.2.0`, published under npm's `latest` tag with
+provenance. From `0.2.1` on, npm and PyPI releases share the same version
+number. Earlier npm versions were not runtime releases; use `0.2.0` or later.
 
-An unqualified install selects npm's `latest` tag. First verify that `latest`
-points to a runtime release rather than the `0.0.1` bootstrap; then install:
+An unqualified install selects npm's `latest` tag:
 
 ```bash
 npm install @alpininsightsolutions/webmcp
