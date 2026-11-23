@@ -1963,11 +1963,13 @@ describe("InsightUiWebmcp registerTool contract", () => {
 });
 
 /**
- * Chrome 155+ shape: RegisteredTool.inputSchema is a JS object and
- * executeTool(registeredTool, inputObject) takes the object from getTools(),
+ * Draft shape: Tool.inputSchema is a JS object and
+ * executeTool(tool, inputObject) takes the Tool object from getTools(),
  * never a tool name and never a JSON string (EPP 2026-09-10 / 2026-09-11).
+ * The Tool interface replaced RegisteredTool dictionaries and renamed
+ * window to source (webmachinelearning/webmcp#348, #385).
  */
-describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
+describe("InsightUiWebmcp against executeTool(Tool, object)", () => {
   afterEach(() => {
     delete require.cache[REGISTER_JS];
     delete globalThis.document;
@@ -1976,16 +1978,22 @@ describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
 
   function withExecuteTool(ctx) {
     const registered = new WeakSet();
+    // Stands in for the registering document's WindowProxy.
+    const ownerWindow = {};
+    ctx.toolSource = ownerWindow;
     const baseGetTools = ctx.getTools;
     ctx.getTools = async function () {
       const listed = await baseGetTools.call(ctx);
       return listed.map((entry) => {
-        // RegisteredTool: deep copy of the registration schema, as an object.
+        // Tool: deep copy of the registration schema, as an object.
         const tool = Object.freeze({
           name: entry.name,
           title: entry.title,
           description: entry.description,
           inputSchema: structuredClone(entry.inputSchema),
+          outputSchema: null,
+          source: ownerWindow,
+          origin: "https://example.test",
           annotations: entry.annotations,
         });
         registered.add(tool);
@@ -1994,7 +2002,7 @@ describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
     };
     ctx.executeTool = async function (tool, input) {
       if (!tool || typeof tool !== "object" || !registered.has(tool)) {
-        throw new TypeError("parameter 1 is not of type 'RegisteredTool'");
+        throw new TypeError("parameter 1 is not of type 'Tool'");
       }
       if (input !== undefined && (input === null || typeof input !== "object")) {
         throw new TypeError("Failed to parse input");
@@ -2032,11 +2040,14 @@ describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
     assert.equal(typeof payload.inputSchema, "object");
     assert.deepEqual(payload.inputSchema, schema);
 
-    const [registeredTool] = await ctx.getTools();
-    assert.equal(typeof registeredTool.inputSchema, "object");
-    assert.deepEqual(registeredTool.inputSchema, schema);
+    const [tool] = await ctx.getTools();
+    assert.equal(typeof tool.inputSchema, "object");
+    assert.deepEqual(tool.inputSchema, schema);
+    assert.equal(tool.source, ctx.toolSource);
+    assert.equal(tool.origin, "https://example.test");
+    assert.equal("window" in tool, false);
 
-    const output = await ctx.executeTool(registeredTool, { section: "trust" });
+    const output = await ctx.executeTool(tool, { section: "trust" });
     assert.equal(output, "section text");
     assert.equal(seen.length, 1);
     assert.deepEqual(seen[0].input, { section: "trust" });
@@ -2057,18 +2068,22 @@ describe("InsightUiWebmcp against executeTool(RegisteredTool, object)", () => {
         return [];
       },
     });
-    const [registeredTool] = await ctx.getTools();
+    const [tool] = await ctx.getTools();
 
     await assert.rejects(
       ctx.executeTool("list_sections", "{}"),
-      /RegisteredTool/,
+      /not of type 'Tool'/,
     );
     await assert.rejects(
-      ctx.executeTool(registeredTool, "{}"),
+      ctx.executeTool({ ...tool }, {}),
+      /not of type 'Tool'/,
+    );
+    await assert.rejects(
+      ctx.executeTool(tool, "{}"),
       /Failed to parse input/,
     );
     assert.equal(calls, 0);
-    assert.deepEqual(await ctx.executeTool(registeredTool, {}), []);
+    assert.deepEqual(await ctx.executeTool(tool, {}), []);
     assert.equal(calls, 1);
   });
 });
