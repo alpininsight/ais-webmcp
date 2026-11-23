@@ -287,7 +287,7 @@ if (context && typeof context.getTools === "function" &&
   context.addEventListener("toolchange", refresh);
   const tools = await refresh();
   const tool = tools.find((item) => item.name === "example_tool" &&
-    item.origin === location.origin && item.window === window);
+    item.origin === location.origin && item.source === window);
   if (tool) {
     const controller = new AbortController();
     const result = await context.executeTool(tool, {}, { signal: controller.signal });
@@ -297,8 +297,21 @@ if (context && typeof context.getTools === "function" &&
 }
 ```
 
-A `RegisteredTool` identifies its owner with `origin` and `window`; keep the
-returned object for `executeTool` rather than reconstructing it. The optional
+`getTools()` returns `Tool` objects. A `Tool` is a snapshot of one
+registration: `origin` is the origin of the registering document, and `source`
+is that document's `WindowProxy`, or `null` once the document is no longer
+fully active, for example after navigation. Each call to `getTools()` returns
+new `Tool` objects. Keep the returned object and pass it to
+`executeTool(tool, input, { signal })` rather than reconstructing it from a
+name or JSON. The draft introduced the `Tool` interface in
+[upstream PR 348](https://github.com/webmachinelearning/webmcp/pull/348) and
+renamed `window` to `source` in the same change
+([upstream issue 385](https://github.com/webmachinelearning/webmcp/issues/385)).
+Earlier drafts returned `RegisteredTool` dictionaries with a `window` member.
+Browsers and the published polyfill (`@w3c/webmcp-polyfill` 0.1.1) may still
+return that older shape; the polyfill change is
+[webmcp-polyfill PR 25](https://github.com/w3c-oss/webmcp-polyfill/pull/25).
+Check the target browser before relying on `source`. The optional
 execution signal cancels an invocation. Cancellation cannot undo work already
 done by a callback. The draft specifies a serialized string result. Browser
 behavior is evolving; [upstream issue 361](https://github.com/webmachinelearning/webmcp/issues/361)
