@@ -66,6 +66,7 @@ describe("InsightUiWebmcp.status()", () => {
       supported: false,
       modelContext: false,
       registerTool: false,
+      waitForToolsUntil: false,
       originTrialMeta: false,
       reason: "no-origin-trial-meta",
     });
@@ -106,6 +107,7 @@ describe("InsightUiWebmcp.status()", () => {
       supported: true,
       modelContext: true,
       registerTool: true,
+      waitForToolsUntil: false,
       originTrialMeta: false,
       reason: "ok",
     });
@@ -145,6 +147,44 @@ describe("InsightUiWebmcp.status()", () => {
     const first = api.status();
     first.reason = "ok";
     assert.equal(api.status().reason, "no-origin-trial-meta");
+  });
+
+  it("reports waitForToolsUntil when that method exists, without calling it", () => {
+    let waited = 0;
+    const ctx = {
+      registerTool() {
+        return Promise.resolve();
+      },
+      waitForToolsUntil() {
+        waited += 1;
+      },
+    };
+    const api = load(docWith(ctx, []));
+    const result = api.status();
+    assert.equal(result.waitForToolsUntil, true);
+    assert.equal(result.supported, true);
+    assert.equal(result.reason, "ok");
+    assert.equal(waited, 0, "status() must not call waitForToolsUntil");
+  });
+
+  it("does not count a non-function waitForToolsUntil as available", () => {
+    const api = load(docWith({ registerTool() {}, waitForToolsUntil: true }, []));
+    assert.equal(api.status().waitForToolsUntil, false);
+  });
+
+  it("reports waitForToolsUntil independently of registerTool", () => {
+    const api = load(
+      docWith(
+        {
+          waitForToolsUntil() {},
+        },
+        [],
+      ),
+    );
+    const result = api.status();
+    assert.equal(result.waitForToolsUntil, true);
+    assert.equal(result.registerTool, false);
+    assert.equal(result.supported, false);
   });
 
   it("never logs while diagnosing", () => {

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- When `document.modelContext.waitForToolsUntil` is available,
+  `registerFromManifest` reports its registration promise with that method
+  so agents wait until the tools are registered. The call is synchronous
+  and happens before the first await. Errors from the method
+  (`InvalidStateError`, `NotAllowedError`) are ignored and registration
+  continues. Without the method, behaviour is unchanged.
+  `status().waitForToolsUntil` reports whether the method exists.
+  `waitForTools(promise)` exposes the same feature detection for hosts
+  that register tools themselves. Start registration before
+  `DOMContentLoaded` (provisional; see webmachinelearning/webmcp#328).
+
 ## 0.2.1 (2026-11-13)
 
 - First PyPI release of the changes listed under `0.2.0`, published on PyPI
