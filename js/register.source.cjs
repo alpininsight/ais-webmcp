@@ -31,6 +31,16 @@
  *   `ontoolactivated` / `ontoolcancel`) fire on `document.modelContext`
  *   (Chrome 156+ / WebMCP PR #245). Helpers `onToolActivated` / `onToolCancel`
  *   subscribe only there — never on `window` or `navigator.modelContext`.
+ * - `waitForToolsUntil(promise)` (Chrome 160+, feature
+ *   `WebMCPWaitForToolsUntil`) tells agents to wait until the promise
+ *   settles, at most 10 seconds. `registerFromManifest` reports its
+ *   registration promise with that method when it is a function, and does
+ *   so synchronously before the first await. `InvalidStateError` (document
+ *   not fully active) and `NotAllowedError` (tools permission denied) are
+ *   ignored so registration continues. Without the method, behaviour is
+ *   unchanged. Hosts that register tools themselves can call
+ *   `waitForTools(promise)`. Pass the promise before `DOMContentLoaded`
+ *   (provisional; see webmachinelearning/webmcp#328).
  *
  * No-op when WebMCP is unavailable so hosts can ship the script unconditionally.
  */
@@ -119,8 +129,10 @@
    *   could not be inspected): browser/version, expired or foreign-origin
    *   token, flags, or Permissions-Policy are the next suspects.
    * Never registers tools, never returns or logs the token value.
+   * `waitForToolsUntil` is true when `document.modelContext.waitForToolsUntil`
+   * is a function (Chrome 160+). It does not change `supported` or `reason`.
    * @returns {{supported: boolean, modelContext: boolean, registerTool: boolean,
-   *   originTrialMeta: (boolean|null), reason: string}}
+   *   waitForToolsUntil: boolean, originTrialMeta: (boolean|null), reason: string}}
    */
   function status() {
     var ctx = getModelContext();
@@ -134,6 +146,7 @@
       supported: canRegister,
       modelContext: !!ctx,
       registerTool: canRegister,
+      waitForToolsUntil: !!(ctx && typeof ctx.waitForToolsUntil === "function"),
       originTrialMeta: meta,
       reason: reason,
     };
@@ -1219,7 +1232,29 @@
       })(manifest.tools[i]);
     }
 
-    return chain;
+    return waitForTools(chain);
+  }
+
+  /**
+   * Report a registration promise via `document.modelContext.waitForToolsUntil`
+   * when that method exists (#86). The call is synchronous. Errors from the
+   * method are ignored so the caller can keep registering tools. Without the
+   * method, `promise` is returned unchanged.
+   *
+   * @template T
+   * @param {Promise<T>} promise
+   * @returns {Promise<T>}
+   */
+  function waitForTools(promise) {
+    var ctx = getModelContext();
+    if (ctx && typeof ctx.waitForToolsUntil === "function") {
+      try {
+        ctx.waitForToolsUntil(promise);
+      } catch (_err) {
+        // InvalidStateError or NotAllowedError: keep registering.
+      }
+    }
+    return promise;
   }
 
   /**
@@ -1238,6 +1273,7 @@
     onToolCancel: onToolCancel,
     registerTool: registerTool,
     registerFromManifest: registerFromManifest,
+    waitForTools: waitForTools,
     registerDefaults: registerDefaults,
     unregister: unregister,
     dispose: dispose,

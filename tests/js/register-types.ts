@@ -72,6 +72,8 @@ async function useRuntime(): Promise<void> {
   });
   await api.registerFromManifest(manifest);
   const batch = await api.registerFromManifest(manifest, handlers);
+  const signaled = api.waitForTools(Promise.resolve(batch));
+  void signaled;
   // @ts-expect-error a tool spec needs id or name
   await api.registerTool({
     description: "missing identifier",
@@ -202,6 +204,8 @@ void api.version;
 
 async function readmeExample(): Promise<void> {
   const status = InsightUiWebmcp.status();
+  const waitForToolsUntil: boolean = status.waitForToolsUntil;
+  void waitForToolsUntil;
   if (status.supported) {
     await InsightUiWebmcp.registerFromManifest(
       {

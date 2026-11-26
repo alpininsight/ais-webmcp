@@ -2158,3 +2158,141 @@ describe("provider serialization and exposure boundaries", () => {
     }
   });
 });
+
+describe("InsightUiWebmcp waitForToolsUntil (#86)", () => {
+  afterEach(() => {
+    delete require.cache[REGISTER_JS];
+    delete globalThis.document;
+    delete globalThis.InsightUiWebmcp;
+  });
+
+  const manifest = {
+    profile: "webpage",
+    version: "1",
+    tools: [
+      {
+        inputSchema: { type: "object" },
+        id: "list_sections",
+        name: "List sections",
+        description: "List sections.",
+      },
+    ],
+  };
+  const handlers = {
+    list_sections: async () => [],
+  };
+
+  it("does not call waitForToolsUntil when the method is missing", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const summary = await api.registerFromManifest(manifest, handlers);
+    assert.equal(summary.registered, 1);
+    assert.equal("waitForToolsUntil" in ctx, false);
+  });
+
+  it("reports the registration promise synchronously before registerTool settles", async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const waitCalls = [];
+    const ctx = makeMockContext({
+      onRegister(tool, options, tools) {
+        return gate.then(() => {
+          tools.set(tool.name, { name: tool.name });
+        });
+      },
+    });
+    ctx.waitForToolsUntil = function (promise) {
+      waitCalls.push({
+        promise,
+        registerCalls: ctx.registerCalls.length,
+      });
+    };
+    const api = loadHelper(ctx);
+
+    const pending = api.registerFromManifest(manifest, handlers);
+    assert.equal(
+      waitCalls.length,
+      1,
+      "waitForToolsUntil must run before the first await",
+    );
+    assert.equal(typeof waitCalls[0].promise.then, "function");
+    assert.equal(waitCalls[0].promise, pending);
+
+    release();
+    const summary = await pending;
+    assert.equal(summary.registered, 1);
+  });
+
+  it("keeps registering when waitForToolsUntil throws InvalidStateError", async () => {
+    const ctx = makeMockContext();
+    ctx.waitForToolsUntil = function () {
+      throw new DOMException(
+        "document is not fully active",
+        "InvalidStateError",
+      );
+    };
+    const api = loadHelper(ctx);
+    const summary = await api.registerFromManifest(manifest, handlers);
+    assert.equal(summary.registered, 1);
+  });
+
+  it("keeps registering when waitForToolsUntil throws NotAllowedError", async () => {
+    const ctx = makeMockContext();
+    ctx.waitForToolsUntil = function () {
+      throw new DOMException("tools permission denied", "NotAllowedError");
+    };
+    const api = loadHelper(ctx);
+    const summary = await api.registerFromManifest(manifest, handlers);
+    assert.equal(summary.registered, 1);
+  });
+
+  it("waitForTools reports a promise when the method exists and returns it", async () => {
+    const ctx = makeMockContext();
+    const seen = [];
+    ctx.waitForToolsUntil = function (promise) {
+      seen.push(promise);
+    };
+    const api = loadHelper(ctx);
+    const promise = Promise.resolve("ready");
+    assert.equal(api.waitForTools(promise), promise);
+    assert.deepEqual(seen, [promise]);
+    assert.equal(await promise, "ready");
+  });
+
+  it("waitForTools is a no-op when the method is missing", async () => {
+    const ctx = makeMockContext();
+    const api = loadHelper(ctx);
+    const promise = Promise.resolve("ready");
+    assert.equal(api.waitForTools(promise), promise);
+    assert.equal(await promise, "ready");
+  });
+
+  it("waitForTools swallows a throw and still returns the promise", async () => {
+    const ctx = makeMockContext();
+    ctx.waitForToolsUntil = function () {
+      throw new DOMException(
+        "document is not fully active",
+        "InvalidStateError",
+      );
+    };
+    const api = loadHelper(ctx);
+    const promise = Promise.resolve("ready");
+    assert.equal(api.waitForTools(promise), promise);
+    assert.equal(await promise, "ready");
+  });
+
+  it("does not report waitForToolsUntil for an invalid manifest", async () => {
+    const ctx = makeMockContext();
+    let waited = 0;
+    ctx.waitForToolsUntil = function () {
+      waited += 1;
+    };
+    const api = loadHelper(ctx);
+    const summary = await api.registerFromManifest({ profile: "", version: "1", tools: [] }, {});
+    assert.equal(summary.registered, 0);
+    assert.match(summary.errors[0].error, /invalid manifest/);
+    assert.equal(waited, 0);
+  });
+});
