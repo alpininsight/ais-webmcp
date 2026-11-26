@@ -235,6 +235,23 @@ if (status.supported) {
 
 A `<script>` tag assigns that same object to `window.InsightUiWebmcp`.
 
+Start `registerFromManifest` or `registerTool` before `DOMContentLoaded` so
+browser agents can see the tools. This timing is provisional: the draft still
+has to fix the exact document lifecycle point
+([webmachinelearning/webmcp#328](https://github.com/webmachinelearning/webmcp/issues/328)).
+Chrome currently uses `DOMContentLoaded`. When
+`document.modelContext.waitForToolsUntil` is available (Chrome 160+, feature
+`WebMCPWaitForToolsUntil`), `registerFromManifest` reports its registration
+promise with that method, synchronously, so agents wait until every tool is
+registered, for at most 10 seconds. If the method is missing, or if it throws
+`InvalidStateError` or `NotAllowedError`, registration continues unchanged.
+`status().waitForToolsUntil` reports whether the method exists. Hosts that
+register tools themselves can pass their own promise to
+`InsightUiWebmcp.waitForTools(promise)`. See the
+[draft `ModelContext`](https://webmachinelearning.github.io/webmcp/) and
+Chrome's [imperative API](https://developer.chrome.com/docs/ai/webmcp/imperative-api)
+("Signal tool readiness").
+
 The repository's npm publication workflow uses GitHub Actions Trusted Publishing
 and provenance without a stored npm token. The first-publication and maintainer
 process is described in [docs/release.md](https://github.com/alpininsight/ais-webmcp/blob/main/docs/release.md).
