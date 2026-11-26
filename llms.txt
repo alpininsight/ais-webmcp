@@ -1,0 +1,52 @@
+# AIS WebMCP
+
+> A framework-independent WebMCP toolkit by Alpin Insight Solutions. This monorepo publishes two packages that share the same WebMCP manifest schema: the Python package `ais-webmcp` on PyPI, and the JavaScript browser runtime `@alpininsightsolutions/webmcp` on npm.
+
+This repository is a monorepo. The two packages are not interchangeable.
+
+- **PyPI / Python:** `ais-webmcp` provides the CLI and JSON schemas for creating, validating, comparing and exporting WebMCP manifests. Install it with `pip install ais-webmcp` (Python 3.12 or later; Django is not required). Source lives under `src/` (`src/ais_webmcp` and `src/webmcp_manifest`). The console script is `ais-webmcp`. Its commands are `init`, `validate`, `list`, `doctor`, `status` (the same local diagnosis as `doctor`), `diff`, and `export`. These commands work on local JSON or YAML files; `doctor` and `status` refuse remote URLs.
+- **npm / JavaScript:** `@alpininsightsolutions/webmcp` is the browser runtime that registers WebMCP tools for a website through `document.modelContext`. Install it with `npm install @alpininsightsolutions/webmcp`. Editable source lives under `js/` (`js/register.source.cjs`). The published entry points are the built `register.js` and its TypeScript declarations. The export is `InsightUiWebmcp` (also `window.InsightUiWebmcp` when loaded from a script tag). Public methods include `status`, `isSupported`, `registerTool`, `registerFromManifest`, `waitForTools`, `onToolActivated`, `onToolCancel`, `registerDefaults`, `unregister`, and `dispose`. The unscoped npm package `webmcp` is unrelated.
+
+The packages share the manifest schema. From version 0.2.1 they also share the same version number. The npm package does not include the Python CLI.
+
+The Django adapter `insight-ui-webmcp` is a separate PyPI package and repository. It depends on `ais-webmcp` and is not this repo.
+
+Documentation: <https://insight-ui-webmcp.alpininsight.ai/>
+Company website: <https://alpininsight.com>
+License: Apache-2.0. WebMCP is a draft of the W3C Web Machine Learning Community Group, not a W3C Standard.
+
+## PyPI package: ais-webmcp
+
+- [ais-webmcp on PyPI](https://pypi.org/project/ais-webmcp/): install with `pip install ais-webmcp`
+- [Python command reference](https://insight-ui-webmcp.alpininsight.ai/docs/ais-webmcp/cli/): `ais-webmcp` commands `init`, `validate`, `list`, `doctor`, `status`, `diff`, and `export`
+- [The manifest and its fields](https://insight-ui-webmcp.alpininsight.ai/docs/ais-webmcp/manifest/): shared JSON and YAML manifest contract
+- [Technical documentation for ais-webmcp](https://insight-ui-webmcp.alpininsight.ai/docs/ais-webmcp/): how the Python package relates to the npm runtime
+- [Python package source](https://github.com/alpininsight/ais-webmcp/tree/develop/src/ais_webmcp): CLI, validation, and bundled assets
+- [Manifest models](https://github.com/alpininsight/ais-webmcp/tree/develop/src/webmcp_manifest): shared Python manifest types
+- [JSON Schema](https://github.com/alpininsight/ais-webmcp/blob/develop/src/ais_webmcp/schema/webmcp-manifest.schema.json): canonical WebMCP manifest schema
+- [pyproject.toml](https://github.com/alpininsight/ais-webmcp/blob/develop/pyproject.toml): PyPI metadata and the `ais-webmcp` console script entry point
+
+## npm package: @alpininsightsolutions/webmcp
+
+- [@alpininsightsolutions/webmcp on npm](https://www.npmjs.com/package/@alpininsightsolutions/webmcp): install with `npm install @alpininsightsolutions/webmcp`
+- [JavaScript and npm guide](https://insight-ui-webmcp.alpininsight.ai/docs/ais-webmcp/javascript/): bundler integration for the browser runtime
+- [Browser and static websites](https://insight-ui-webmcp.alpininsight.ai/docs/ais-webmcp/browser/): using the runtime without a Python install
+- [Browser runtime source](https://github.com/alpininsight/ais-webmcp/blob/develop/js/register.source.cjs): editable JavaScript source under `js/`
+- [TypeScript declarations](https://github.com/alpininsight/ais-webmcp/blob/develop/src/ais_webmcp/assets/register.d.ts): public `InsightUiWebmcp` API (`status`, `registerTool`, `registerFromManifest`, `waitForTools`, and related methods)
+- [package.json](https://github.com/alpininsight/ais-webmcp/blob/develop/package.json): npm package name, description, and published file list
+
+## Shared documentation
+
+- [Insight UI WebMCP documentation](https://insight-ui-webmcp.alpininsight.ai/): documentation site for this toolkit and the Django adapter
+- [Newcomer guide](https://insight-ui-webmcp.alpininsight.ai/docs/guide/): which package to use
+- [Package comparison](https://insight-ui-webmcp.alpininsight.ai/docs/guide/packages/): ais-webmcp, the npm runtime, and insight-ui-webmcp
+- [README](https://github.com/alpininsight/ais-webmcp/blob/develop/README.md): package overview, CLI examples, and npm usage
+- [WebMCP draft specification](https://webmachinelearning.github.io/webmcp/): W3C Community Group draft targeted by this toolkit
+
+## Optional
+
+- [Company website](https://alpininsight.com): Alpin Insight Solutions
+- [CHANGELOG](https://github.com/alpininsight/ais-webmcp/blob/develop/CHANGELOG.md): released versions
+- [CONTRIBUTING](https://github.com/alpininsight/ais-webmcp/blob/develop/CONTRIBUTING.md): development setup and pull request rules
+- [LICENSE](https://github.com/alpininsight/ais-webmcp/blob/develop/LICENSE): Apache-2.0
+- [insight-ui-webmcp](https://github.com/alpininsight/insight-ui-webmcp): separate Django adapter that depends on `ais-webmcp`
