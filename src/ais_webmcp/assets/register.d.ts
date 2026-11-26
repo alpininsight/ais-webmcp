@@ -27,6 +27,13 @@ declare const InsightUiWebmcp: {
     handlers?: Handlers,
     options?: InsightUiWebmcp.WebmcpRegisterOptions,
   ): Promise<InsightUiWebmcp.WebmcpManifestRegistration>;
+  /**
+   * When `document.modelContext.waitForToolsUntil` is a function, report
+   * `promise` with that method so agents wait until it settles. The call is
+   * synchronous. `InvalidStateError` and `NotAllowedError` are ignored.
+   * Without the method, `promise` is returned unchanged.
+   */
+  waitForTools<T>(promise: Promise<T>): Promise<T>;
   registerDefaults(): Promise<number>;
   unregister(name: string): boolean;
   dispose(): number;
@@ -38,6 +45,11 @@ declare namespace InsightUiWebmcp {
     supported: boolean;
     modelContext: boolean;
     registerTool: boolean;
+    /**
+     * True when `document.modelContext.waitForToolsUntil` is a function.
+     * Independent of `supported`.
+     */
+    waitForToolsUntil: boolean;
     originTrialMeta: boolean | null;
     reason: string;
   }

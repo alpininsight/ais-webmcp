@@ -1,0 +1,32 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/alpininsight/ais-webmcp",
+  "public_key": "pk_VWZLPfLHdTXNbuwS6HLCt",
+  "projectTitle": "AIS WebMCP",
+  "description": "A framework-independent CLI, schemas and browser runtime for creating, validating and managing WebMCP manifests so a website can describe its tools and actions to AI agents.",
+  "excludeFolders": [
+    "tests",
+    "scripts",
+    "archive",
+    "archived",
+    "old",
+    "docs/old",
+    "deprecated",
+    "legacy",
+    "previous",
+    "outdated",
+    "superseded",
+    "_snaps",
+    "benchmark",
+    "benchmarks",
+    "benches",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage"
+  ],
+  "rules": [
+    "Create and validate WebMCP manifests as local JSON or YAML before publishing them on a website.",
+    "Use the browser runtime to register the website's own content and actions as WebMCP tools."
+  ]
+}
